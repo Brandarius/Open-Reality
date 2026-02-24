@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/sinisterMage/Open-Reality/tree/main/docs
+    about: Check the docs for guides, API reference, and architecture overview.
+  - name: Examples
+    url: https://github.com/sinisterMage/Open-Reality/tree/main/examples
+    about: Browse example scenes and demos.

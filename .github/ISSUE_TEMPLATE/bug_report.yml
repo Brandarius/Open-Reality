@@ -1,0 +1,102 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in OpenReality
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the fields below
+        so we can reproduce and fix the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of the bug.
+      placeholder: Describe what went wrong...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal steps to reproduce the behavior.
+      placeholder: |
+        1. Create a scene with...
+        2. Call render(...)
+        3. Observe...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened instead.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Linux (Ubuntu/Debian)
+        - Linux (Arch)
+        - Linux (Fedora)
+        - Linux (other)
+        - macOS
+        - Windows
+    validations:
+      required: true
+
+  - type: input
+    id: julia-version
+    attributes:
+      label: Julia Version
+      description: "Output of `julia --version`"
+      placeholder: "1.10.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Rendering Backend
+      description: Which rendering backend were you using?
+      options:
+        - OpenGL
+        - Vulkan
+        - Metal
+        - WebGPU
+        - Not applicable
+    validations:
+      required: true
+
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU
+      description: Your GPU model and driver version (if relevant).
+      placeholder: "NVIDIA RTX 3080 / driver 535.129"
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Screenshots
+      description: Paste any error output, stack traces, or attach screenshots.
+      render: shell
+    validations:
+      required: false
