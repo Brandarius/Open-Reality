@@ -201,6 +201,13 @@ if Sys.isapple()
     include("backend/metal/metal_taa.jl")
     include("backend/metal/metal_postprocess.jl")
     include("backend/metal/metal_deferred.jl")
+    include("backend/metal/metal_instancing.jl")
+    include("backend/metal/metal_dof.jl")
+    include("backend/metal/metal_motion_blur.jl")
+    include("backend/metal/metal_terrain.jl")
+    include("backend/metal/metal_ui.jl")
+    include("backend/metal/metal_gpu_particles.jl")
+    include("backend/metal/metal_particles.jl")
     include("backend/metal/metal_backend.jl")
 end
 

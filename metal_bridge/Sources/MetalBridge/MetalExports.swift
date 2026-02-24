@@ -8,5 +8,5 @@
 
 @_cdecl("metal_bridge_exports")
 public func metal_bridge_exports() -> Int32 {
-    return 46  // number of exported FFI symbols
+    return 56  // number of exported FFI symbols
 }

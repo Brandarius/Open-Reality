@@ -301,8 +301,13 @@ mutable struct MetalDeferredPipeline <: AbstractDeferredPipeline
     ibl_env::Union{MetalIBLEnvironment, Nothing}
     quad_vertex_buffer::UInt64
 
+    # New: DOF and Motion Blur passes (operate between TAA and post-processing)
+    dof_pass::Union{MetalDOFPass, Nothing}
+    motion_blur_pass::Union{MetalMotionBlurPass, Nothing}
+
     MetalDeferredPipeline() =
-        new(nothing, nothing, UInt64(0), nothing, nothing, nothing, nothing, nothing, UInt64(0))
+        new(nothing, nothing, UInt64(0), nothing, nothing, nothing, nothing, nothing, UInt64(0),
+            nothing, nothing)
 end
 
 """

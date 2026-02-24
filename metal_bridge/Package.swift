@@ -22,5 +22,10 @@ let package = Package(
                 .linkedFramework("AppKit"),
             ]
         ),
+        .testTarget(
+            name: "MetalBridgeTests",
+            dependencies: ["MetalBridge"],
+            path: "Tests/MetalBridgeTests"
+        ),
     ]
 )

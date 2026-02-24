@@ -286,3 +286,62 @@ function metal_begin_render_pass_texture(cmd_buf_handle::UInt64, texture_handle:
           cmd_buf_handle, texture_handle, load_action,
           clear_r, clear_g, clear_b, clear_a)
 end
+
+# ==================================================================
+# Instanced + indirect draw calls
+# ==================================================================
+
+function metal_draw_indexed_instanced(encoder_handle::UInt64, primitive_type::UInt32,
+                                       index_count::Int32, index_buffer_handle::UInt64,
+                                       index_buffer_offset::Int, instance_count::Int32)
+    ccall((:metal_draw_indexed_instanced, _metal_lib()), Cvoid,
+          (UInt64, UInt32, Int32, UInt64, Int, Int32),
+          encoder_handle, primitive_type, index_count, index_buffer_handle,
+          index_buffer_offset, instance_count)
+end
+
+function metal_draw_primitives_indirect(encoder_handle::UInt64, primitive_type::UInt32,
+                                         indirect_buffer_handle::UInt64, indirect_buffer_offset::Int)
+    ccall((:metal_draw_primitives_indirect, _metal_lib()), Cvoid,
+          (UInt64, UInt32, UInt64, Int),
+          encoder_handle, primitive_type, indirect_buffer_handle, indirect_buffer_offset)
+end
+
+# ==================================================================
+# Compute shaders
+# ==================================================================
+
+function metal_create_compute_pipeline(msl_source::String, function_name::String)::UInt64
+    ccall((:metal_create_compute_pipeline, _metal_lib()), UInt64,
+          (Cstring, Cstring), msl_source, function_name)
+end
+
+function metal_destroy_compute_pipeline(handle::UInt64)
+    ccall((:metal_destroy_compute_pipeline, _metal_lib()), Cvoid, (UInt64,), handle)
+end
+
+function metal_begin_compute_pass(cmd_buf_handle::UInt64)::UInt64
+    ccall((:metal_begin_compute_pass, _metal_lib()), UInt64, (UInt64,), cmd_buf_handle)
+end
+
+function metal_end_compute_pass(encoder_handle::UInt64)
+    ccall((:metal_end_compute_pass, _metal_lib()), Cvoid, (UInt64,), encoder_handle)
+end
+
+function metal_set_compute_buffer(encoder_handle::UInt64, buffer_handle::UInt64, offset::Int, index::Int32)
+    ccall((:metal_set_compute_buffer, _metal_lib()), Cvoid,
+          (UInt64, UInt64, Int, Int32), encoder_handle, buffer_handle, offset, index)
+end
+
+function metal_set_compute_texture(encoder_handle::UInt64, texture_handle::UInt64, index::Int32)
+    ccall((:metal_set_compute_texture, _metal_lib()), Cvoid,
+          (UInt64, UInt64, Int32), encoder_handle, texture_handle, index)
+end
+
+function metal_dispatch_threadgroups(encoder_handle::UInt64, pipeline_handle::UInt64,
+                                      grid_x::Int32, grid_y::Int32, grid_z::Int32,
+                                      group_x::Int32, group_y::Int32, group_z::Int32)
+    ccall((:metal_dispatch_threadgroups, _metal_lib()), Cvoid,
+          (UInt64, UInt64, Int32, Int32, Int32, Int32, Int32, Int32),
+          encoder_handle, pipeline_handle, grid_x, grid_y, grid_z, group_x, group_y, group_z)
+end

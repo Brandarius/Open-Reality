@@ -458,6 +458,75 @@ public func metal_set_scissor_rect(_ encoderHandle: UInt64, _ x: Int32, _ y: Int
     encoderWrapper.encoder.setScissorRect(scissorRect)
 }
 
+// MARK: - Draw Indexed Instanced
+
+/// Issue an indexed instanced draw call.
+@_cdecl("metal_draw_indexed_instanced")
+public func metal_draw_indexed_instanced(
+    _ encoderHandle: UInt64,
+    _ primitiveType: UInt32,
+    _ indexCount: Int32,
+    _ indexBufferHandle: UInt64,
+    _ indexBufferOffset: Int,
+    _ instanceCount: Int32
+) {
+    guard let encoderWrapper: MetalRenderEncoderWrapper = registry.get(encoderHandle) else {
+        print("[MetalEncoding] ERROR: Invalid encoder handle \(encoderHandle)")
+        return
+    }
+
+    guard let indexBufferWrapper: MetalBufferWrapper = registry.get(indexBufferHandle) else {
+        print("[MetalEncoding] ERROR: Invalid index buffer handle \(indexBufferHandle)")
+        return
+    }
+
+    guard let primType = MetalPrimitiveType(rawValue: primitiveType) else {
+        print("[MetalEncoding] ERROR: Invalid primitive type \(primitiveType)")
+        return
+    }
+
+    encoderWrapper.encoder.drawIndexedPrimitives(
+        type: toMTLPrimitiveType(primType),
+        indexCount: Int(indexCount),
+        indexType: .uint32,
+        indexBuffer: indexBufferWrapper.buffer,
+        indexBufferOffset: indexBufferOffset,
+        instanceCount: Int(instanceCount)
+    )
+}
+
+// MARK: - Draw Primitives Indirect
+
+/// Issue an indirect draw call (for GPU particles).
+@_cdecl("metal_draw_primitives_indirect")
+public func metal_draw_primitives_indirect(
+    _ encoderHandle: UInt64,
+    _ primitiveType: UInt32,
+    _ indirectBufferHandle: UInt64,
+    _ indirectBufferOffset: Int
+) {
+    guard let encoderWrapper: MetalRenderEncoderWrapper = registry.get(encoderHandle) else {
+        print("[MetalEncoding] ERROR: Invalid encoder handle \(encoderHandle)")
+        return
+    }
+
+    guard let indirectBufferWrapper: MetalBufferWrapper = registry.get(indirectBufferHandle) else {
+        print("[MetalEncoding] ERROR: Invalid indirect buffer handle \(indirectBufferHandle)")
+        return
+    }
+
+    guard let primType = MetalPrimitiveType(rawValue: primitiveType) else {
+        print("[MetalEncoding] ERROR: Invalid primitive type \(primitiveType)")
+        return
+    }
+
+    encoderWrapper.encoder.drawPrimitives(
+        type: toMTLPrimitiveType(primType),
+        indirectBuffer: indirectBufferWrapper.buffer,
+        indirectBufferOffset: indirectBufferOffset
+    )
+}
+
 // MARK: - Begin Render Pass (Cube Face)
 
 /// Begin a render pass targeting a specific face (and mip level) of a cube texture.

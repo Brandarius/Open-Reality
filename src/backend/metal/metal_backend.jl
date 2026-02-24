@@ -41,6 +41,19 @@ mutable struct MetalBackend <: AbstractBackend
     default_sampler::UInt64
     shadow_sampler::UInt64
 
+    # Instancing
+    instance_buffer::Union{MetalInstanceBuffer, Nothing}
+
+    # Terrain
+    terrain_caches::Dict{EntityID, MetalTerrainGPUCache}
+
+    # UI
+    ui_renderer::Union{MetalUIRenderer, Nothing}
+
+    # Particles
+    gpu_particle_shaders::Union{MetalGPUParticleShaders, Nothing}
+    particle_renderer::Union{MetalParticleRendererState, Nothing}
+
     MetalBackend(; post_process_config::PostProcessConfig = PostProcessConfig(), use_deferred::Bool = true) = new(
         false, nothing, InputState(), UInt64(0), 1280, 720,
         nothing, UInt64(0), use_deferred,
@@ -49,7 +62,11 @@ mutable struct MetalBackend <: AbstractBackend
         MetalPostProcessPipeline(config=post_process_config),
         UInt64(0),
         UInt64(0), UInt64(0),
-        UInt64(0), UInt64(0)
+        UInt64(0), UInt64(0),
+        nothing,
+        Dict{EntityID, MetalTerrainGPUCache}(),
+        nothing,
+        nothing, nothing
     )
 end
 
@@ -101,6 +118,17 @@ function initialize!(backend::MetalBackend;
         @info "Metal deferred rendering pipeline initialized"
     end
 
+    # DOF and Motion Blur passes (inside deferred pipeline)
+    if backend.use_deferred && backend.deferred_pipeline !== nothing
+        dof = MetalDOFPass(width=width, height=height)
+        metal_create_dof_pass!(dof, backend.device_handle, width, height)
+        backend.deferred_pipeline.dof_pass = dof
+
+        mblur = MetalMotionBlurPass(width=width, height=height)
+        metal_create_motion_blur_pass!(mblur, backend.device_handle, width, height)
+        backend.deferred_pipeline.motion_blur_pass = mblur
+    end
+
     # Forward PBR pipeline (for transparent objects)
     pbr_msl = _load_msl_shader("pbr_forward.metal")
     backend.forward_pipeline = metal_get_or_create_pipeline(
@@ -120,6 +148,18 @@ function initialize!(backend::MetalBackend;
         metal_create_post_process_pipeline!(backend.post_process, backend.device_handle, width, height)
     end
 
+    # UI Renderer
+    backend.ui_renderer = MetalUIRenderer()
+    metal_init_ui_renderer!(backend.ui_renderer, backend.device_handle)
+
+    # Particle Renderer (CPU fallback)
+    backend.particle_renderer = MetalParticleRendererState()
+    metal_init_particle_renderer!(backend.particle_renderer, backend.device_handle)
+
+    # GPU Particle Shaders (compute-based)
+    backend.gpu_particle_shaders = MetalGPUParticleShaders()
+    metal_init_gpu_particle_shaders!(backend.gpu_particle_shaders, backend.device_handle)
+
     backend.initialized = true
     @info "Metal backend initialized" width height
     return nothing
@@ -127,9 +167,48 @@ end
 
 function shutdown!(backend::MetalBackend)
     if backend.deferred_pipeline !== nothing
+        # Destroy DOF and motion blur passes
+        if backend.deferred_pipeline.dof_pass !== nothing
+            metal_destroy_dof_pass!(backend.deferred_pipeline.dof_pass)
+            backend.deferred_pipeline.dof_pass = nothing
+        end
+        if backend.deferred_pipeline.motion_blur_pass !== nothing
+            metal_destroy_motion_blur_pass!(backend.deferred_pipeline.motion_blur_pass)
+            backend.deferred_pipeline.motion_blur_pass = nothing
+        end
         metal_destroy_deferred_pipeline!(backend.deferred_pipeline)
         backend.deferred_pipeline = nothing
     end
+
+    # Clean up instance buffer
+    if backend.instance_buffer !== nothing
+        destroy_metal_instance_buffer!(backend.instance_buffer)
+        backend.instance_buffer = nothing
+    end
+    reset_metal_instance_buffer!()
+
+    # Clean up terrain caches
+    for (_, cache) in backend.terrain_caches
+        metal_destroy_terrain_cache!(cache)
+    end
+    empty!(backend.terrain_caches)
+
+    # Clean up UI renderer
+    if backend.ui_renderer !== nothing
+        metal_shutdown_ui_renderer!(backend.ui_renderer)
+        backend.ui_renderer = nothing
+    end
+
+    # Clean up particle systems
+    if backend.gpu_particle_shaders !== nothing
+        metal_shutdown_gpu_particle_shaders!(backend.gpu_particle_shaders)
+        backend.gpu_particle_shaders = nothing
+    end
+    if backend.particle_renderer !== nothing
+        metal_shutdown_particle_renderer!(backend.particle_renderer)
+        backend.particle_renderer = nothing
+    end
+
     metal_destroy_all_meshes!(backend.gpu_cache)
     metal_destroy_all_textures!(backend.texture_cache)
     if backend.csm !== nothing
@@ -514,6 +593,24 @@ function render_frame!(backend::MetalBackend, scene::Scene)
                                                       view, proj, cmd_buf)
         end
 
+        # Depth of Field (between TAA and post-processing)
+        if pipeline.dof_pass !== nothing && backend.post_process !== nothing &&
+           backend.post_process.config.dof_enabled
+            final_color_texture = metal_render_dof!(pipeline.dof_pass, backend,
+                                                      final_color_texture,
+                                                      pipeline.gbuffer.depth,
+                                                      backend.post_process.config, cmd_buf)
+        end
+
+        # Motion Blur (after DOF, before post-processing)
+        if pipeline.motion_blur_pass !== nothing && backend.post_process !== nothing &&
+           backend.post_process.config.motion_blur_enabled
+            final_color_texture = metal_render_motion_blur!(pipeline.motion_blur_pass, backend,
+                                                              final_color_texture,
+                                                              pipeline.gbuffer.depth,
+                                                              vp, backend.post_process.config, cmd_buf)
+        end
+
         # Post-processing (bloom + tone mapping + gamma) → drawable
         if backend.post_process !== nothing
             metal_run_post_process!(backend.post_process, backend, final_color_texture,
@@ -536,7 +633,13 @@ function render_frame!(backend::MetalBackend, scene::Scene)
             metal_end_render_pass(encoder)
         end
 
-        # TODO: Forward pass for transparent objects on top of deferred result
+        # UI Rendering (after post-processing, on top of everything)
+        if backend.ui_renderer !== nothing && backend.ui_renderer.initialized
+            ui_ctx = get_ui_context()
+            if ui_ctx !== nothing
+                metal_render_ui!(backend.ui_renderer, backend, ui_ctx, cmd_buf)
+            end
+        end
 
     # ==================================================================
     # FORWARD RENDERING PATH
