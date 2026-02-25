@@ -1494,6 +1494,11 @@ function render_frame!(backend::OpenGLBackend, scene::Scene)
 
     render_debug_draw!(backend, view, proj)
 
+    # Visual regression test capture hook (before swap to read back buffer)
+    if _CAPTURE_HOOK[] !== nothing
+        _CAPTURE_HOOK[](backend.window.width, backend.window.height)
+    end
+
     swap_buffers!(backend.window)
     return nothing
 end

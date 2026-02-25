@@ -180,6 +180,7 @@ include("backend/opengl/opengl_terrain.jl")      # Terrain renderer
 include("backend/opengl/opengl_gpu_particles.jl") # GPU compute particle system (GL 4.3+)
 include("backend/opengl/opengl_particles.jl")    # Particle renderer (CPU fallback + GPU dispatch)
 include("backend/opengl.jl")                      # OpenGLBackend, render_frame!
+include("backend/opengl/opengl_capture.jl")       # Framebuffer capture for visual testing
 
 # Shared rendering orchestration (after backend — uses ECS + frustum culling)
 include("rendering/frame_preparation.jl")
@@ -754,5 +755,13 @@ export reset_debug_console!
 
 # Export DebugDraw
 export OPENREALITY_DEBUG, debug_line!, debug_box!, debug_sphere!, flush_debug_draw!
+
+# Visual regression testing
+include("testing/image_diff.jl")
+include("testing/visual_test_runner.jl")
+export capture_framebuffer, save_capture, load_reference
+export ImageDiffResult, compare_images, compute_psnr
+export VisualStory, VisualTestResult, @visual_story, visual_story
+export clear_visual_stories!, run_visual_tests
 
 end  # module OpenReality

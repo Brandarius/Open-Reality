@@ -3,3 +3,4 @@ target
 bazel-*
 .swiftpm
 .openreality/shader_cache/
+test/visual/diffs/
