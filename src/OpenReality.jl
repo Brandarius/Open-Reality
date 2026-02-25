@@ -61,6 +61,7 @@ include("components/animation.jl")
 include("components/animation_blend_tree.jl")
 include("components/audio.jl")
 include("components/skeleton.jl")
+include("components/ik.jl")
 include("components/particle_system.jl")
 include("components/terrain.jl")
 include("components/script.jl")
@@ -97,6 +98,7 @@ include("systems/physics.jl")
 include("systems/animation.jl")
 include("systems/animation_blend_tree.jl")
 include("systems/camera_controller.jl")
+include("systems/ik.jl")
 include("systems/skinning.jl")
 include("systems/audio.jl")
 include("systems/particles.jl")
@@ -152,6 +154,7 @@ include("rendering/shadow_map.jl")         # pure math (compute_light_space_matr
 include("rendering/csm.jl")               # pure math (cascade computation)
 include("rendering/camera_utils.jl")
 include("rendering/frustum_culling.jl")
+include("rendering/light_culling.jl")
 include("rendering/lod.jl")
 include("rendering/terrain.jl")
 include("systems/terrain.jl")
@@ -304,6 +307,7 @@ const COMPONENT_TYPES = DataType[
     # Lights
     PointLightComponent,
     DirectionalLightComponent,
+    SpotLightComponent,
     IBLComponent,
     # Lod
     LODComponent,
@@ -322,6 +326,8 @@ const COMPONENT_TYPES = DataType[
     # Skeleton
     BoneComponent,
     SkinnedMeshComponent,
+    # IK
+    IKConstraintComponent,
     # Terrain
     TerrainComponent,
     # Transform
@@ -373,7 +379,7 @@ export Vec3d, Quaterniond
 export MeshComponent
 export MaterialComponent, TextureRef
 export CameraComponent
-export PointLightComponent, DirectionalLightComponent, IBLComponent
+export PointLightComponent, DirectionalLightComponent, SpotLightComponent, IBLComponent
 export cube_mesh, sphere_mesh, plane_mesh
 export PlayerComponent, create_player
 export LODComponent, LODLevel, LODTransitionMode, LOD_TRANSITION_INSTANT, LOD_TRANSITION_DITHER
@@ -421,7 +427,7 @@ export CollisionCallbackComponent, CollisionEventCache, update_collision_callbac
 
 # Export Animation
 export InterpolationMode, INTERP_STEP, INTERP_LINEAR, INTERP_CUBICSPLINE
-export AnimationChannel, AnimationClip, AnimationComponent
+export AnimationChannel, AnimationClip, AnimationComponent, AnimationEvent, AnimationEventFired
 export update_animations!
 
 # Export Animation Blend Trees
@@ -432,6 +438,7 @@ export set_parameter!, set_bool_parameter!, fire_trigger!
 
 # Export Skeletal Animation
 export BoneComponent, SkinnedMeshComponent, BoneIndices4
+export IKConstraintComponent, TwoBoneIKConstraint, LookAtIKConstraint, update_ik!
 export update_skinned_meshes!, MAX_BONES
 
 # Export Audio
@@ -467,10 +474,12 @@ export compute_cascade_light_matrix, render_csm_cascade!
 # Export Frustum Culling
 export Frustum, FrustumPlane, BoundingSphere
 export extract_frustum, bounding_sphere_from_mesh, is_sphere_in_frustum
+export LightClusterConfig, LightClusterData, assign_lights_to_clusters!
 
 # Export Post-Processing
 export Framebuffer, PostProcessConfig, PostProcessPipeline
 export ToneMappingMode, TONEMAP_REINHARD, TONEMAP_ACES, TONEMAP_UNCHARTED2
+export FogMode, FOG_LINEAR, FOG_EXPONENTIAL, FOG_EXPONENTIAL2
 export DOFPass, create_dof_pass!, destroy_dof_pass!, resize_dof_pass!, render_dof!
 export MotionBlurPass, create_motion_blur_pass!, destroy_motion_blur_pass!, resize_motion_blur_pass!, render_motion_blur!
 

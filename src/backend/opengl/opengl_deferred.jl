@@ -339,6 +339,7 @@ const DEFERRED_LIGHTING_FRAGMENT_SHADER = """
 
 #define MAX_POINT_LIGHTS 64
 #define MAX_DIR_LIGHTS 8
+#define MAX_SPOT_LIGHTS 16
 
 in vec2 v_TexCoord;
 out vec4 FragColor;
@@ -370,6 +371,16 @@ uniform vec3 u_DirLightDirections[MAX_DIR_LIGHTS];
 uniform vec3 u_DirLightColors[MAX_DIR_LIGHTS];
 uniform float u_DirLightIntensities[MAX_DIR_LIGHTS];
 
+// Spot lights
+uniform int u_NumSpotLights;
+uniform vec3 u_SpotLightPositions[MAX_SPOT_LIGHTS];
+uniform vec3 u_SpotLightDirections[MAX_SPOT_LIGHTS];
+uniform vec3 u_SpotLightColors[MAX_SPOT_LIGHTS];
+uniform float u_SpotLightIntensities[MAX_SPOT_LIGHTS];
+uniform float u_SpotLightRanges[MAX_SPOT_LIGHTS];
+uniform float u_SpotLightInnerCos[MAX_SPOT_LIGHTS];  // cos(inner_cone)
+uniform float u_SpotLightOuterCos[MAX_SPOT_LIGHTS];  // cos(outer_cone)
+
 // Cascaded Shadow Mapping (CSM)
 #define MAX_CASCADES 4
 uniform sampler2D u_CascadeShadowMaps[MAX_CASCADES];
@@ -377,6 +388,31 @@ uniform mat4 u_CascadeMatrices[MAX_CASCADES];
 uniform float u_CascadeSplits[MAX_CASCADES + 1];
 uniform int u_NumCascades;
 uniform int u_HasShadows;
+
+// Spot light shadow maps (max 4 shadow-casting spot lights)
+#define MAX_SPOT_SHADOW_MAPS 4
+uniform sampler2D u_SpotShadowMaps[MAX_SPOT_SHADOW_MAPS];
+uniform mat4 u_SpotShadowMatrices[MAX_SPOT_SHADOW_MAPS];
+uniform int u_SpotShadowIndices[MAX_SPOT_LIGHTS];  // Maps spot light index -> shadow map index (-1 = no shadow)
+uniform int u_NumSpotShadowMaps;
+
+// Point light shadow cubemaps (max 4 shadow-casting point lights)
+#define MAX_POINT_SHADOW_MAPS 4
+uniform samplerCube u_PointShadowMaps[MAX_POINT_SHADOW_MAPS];
+uniform float u_PointShadowFarPlanes[MAX_POINT_SHADOW_MAPS];
+uniform int u_PointShadowIndices[MAX_POINT_LIGHTS];  // Maps point light index -> shadow map index (-1 = no shadow)
+uniform int u_NumPointShadowMaps;
+
+// Fog
+uniform int u_FogEnabled;
+uniform int u_FogMode;           // 0 = linear, 1 = exponential, 2 = exponential squared
+uniform vec3 u_FogColor;
+uniform float u_FogDensity;
+uniform float u_FogStart;
+uniform float u_FogEnd;
+uniform int u_FogHeightEnabled;
+uniform float u_FogHeightFalloff;
+uniform float u_FogHeightOffset;
 
 // Image-Based Lighting (IBL)
 uniform samplerCube u_IrradianceMap;
@@ -459,6 +495,45 @@ vec3 computeRadiance(vec3 N, vec3 V, vec3 L, vec3 radiance,
     return (kD * albedo / PI + specular) * radiance * NdotL;
 }
 
+// Shadow softness configuration
+uniform float u_ShadowSoftness;     // PCF spread multiplier (default 1.0)
+uniform int u_ShadowPCSSEnabled;    // 0 = PCF only, 1 = PCSS
+uniform float u_ShadowLightSize;    // Light source size for PCSS penumbra (default 0.02)
+
+// 16-sample Poisson disk for high-quality PCF
+const vec2 poissonDisk[16] = vec2[16](
+    vec2(-0.94201624, -0.39906216),  vec2( 0.94558609, -0.76890725),
+    vec2(-0.09418410, -0.92938870),  vec2( 0.34495938,  0.29387760),
+    vec2(-0.91588581,  0.45771432),  vec2(-0.81544232, -0.87912464),
+    vec2(-0.38277543,  0.27676845),  vec2( 0.97484398,  0.75648379),
+    vec2( 0.44323325, -0.97511554),  vec2( 0.53742981, -0.47373420),
+    vec2(-0.26496911, -0.41893023),  vec2( 0.79197514,  0.19090188),
+    vec2(-0.24188840,  0.99706507),  vec2(-0.81409955,  0.91437590),
+    vec2( 0.19984126,  0.78641367),  vec2( 0.14383161, -0.14100790)
+);
+
+// PCSS blocker search: find average blocker depth
+float findBlockerDepth(sampler2D shadowMap, vec2 uv, float receiverDepth, float bias, float searchRadius)
+{
+    float blockerSum = 0.0;
+    int numBlockers = 0;
+
+    for (int i = 0; i < 16; ++i)
+    {
+        float sampleDepth = texture(shadowMap, uv + poissonDisk[i] * searchRadius).r;
+        if (sampleDepth < receiverDepth - bias)
+        {
+            blockerSum += sampleDepth;
+            numBlockers++;
+        }
+    }
+
+    if (numBlockers == 0)
+        return -1.0;  // No blockers found
+
+    return blockerSum / float(numBlockers);
+}
+
 // Helper function to compute shadow for a specific cascade
 float computeShadowForCascade(vec3 worldPos, vec3 N, vec3 L, int cascadeIdx, sampler2D shadowMap, mat4 cascadeMatrix)
 {
@@ -473,18 +548,113 @@ float computeShadowForCascade(vec3 worldPos, vec3 N, vec3 L, int cascadeIdx, sam
     float bias = max(0.005 * (1.0 - dot(N, L)), 0.001);
     bias *= 1.0 / (float(cascadeIdx + 1) * 0.5 + 1.0);
 
+    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+    float filterRadius = u_ShadowSoftness * texelSize.x * 3.0;
+
+    // PCSS: variable penumbra based on blocker distance
+    if (u_ShadowPCSSEnabled == 1)
+    {
+        float searchRadius = u_ShadowLightSize * (projCoords.z - 0.01) / projCoords.z;
+        float avgBlockerDepth = findBlockerDepth(shadowMap, projCoords.xy, projCoords.z, bias, searchRadius);
+
+        if (avgBlockerDepth < 0.0)
+            return 0.0;  // No blockers — fully lit
+
+        // Penumbra size from similar triangles
+        float penumbra = u_ShadowLightSize * (projCoords.z - avgBlockerDepth) / avgBlockerDepth;
+        filterRadius = max(penumbra, texelSize.x);
+    }
+
+    // Poisson-disk PCF sampling
+    float shadow = 0.0;
+    for (int i = 0; i < 16; ++i)
+    {
+        float pcfDepth = texture(shadowMap, projCoords.xy + poissonDisk[i] * filterRadius).r;
+        shadow += projCoords.z - bias > pcfDepth ? 1.0 : 0.0;
+    }
+    shadow /= 16.0;
+    return shadow;
+}
+
+// Spot light shadow computation (helper with constant sampler)
+float computeSpotShadowForMap(vec3 worldPos, vec3 N, vec3 L, int shadowIdx, sampler2D shadowMap)
+{
+    vec4 fragPosLightSpace = u_SpotShadowMatrices[shadowIdx] * vec4(worldPos, 1.0);
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    projCoords = projCoords * 0.5 + 0.5;
+
+    if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 ||
+        projCoords.y < 0.0 || projCoords.y > 1.0)
+        return 0.0;
+
+    float bias = max(0.005 * (1.0 - dot(N, L)), 0.002);
+
+    // Poisson-disk PCF for spot light shadows
     float shadow = 0.0;
     vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
-    for (int x = -1; x <= 1; ++x)
+    float filterRadius = texelSize.x * 2.0;
+
+    for (int i = 0; i < 16; ++i)
     {
-        for (int y = -1; y <= 1; ++y)
+        float d = texture(shadowMap, projCoords.xy + poissonDisk[i] * filterRadius).r;
+        shadow += projCoords.z - bias > d ? 1.0 : 0.0;
+    }
+    shadow /= 16.0;
+    return shadow;
+}
+
+float computeSpotShadow(vec3 worldPos, vec3 N, vec3 L, int shadowIdx)
+{
+    switch (shadowIdx)
+    {
+        case 0: return computeSpotShadowForMap(worldPos, N, L, 0, u_SpotShadowMaps[0]);
+        case 1: return computeSpotShadowForMap(worldPos, N, L, 1, u_SpotShadowMaps[1]);
+        case 2: return computeSpotShadowForMap(worldPos, N, L, 2, u_SpotShadowMaps[2]);
+        case 3: return computeSpotShadowForMap(worldPos, N, L, 3, u_SpotShadowMaps[3]);
+        default: return 0.0;
+    }
+}
+
+// Point light shadow computation (cubemap, helper with constant sampler)
+float computePointShadowForMap(vec3 worldPos, vec3 lightPos, int shadowIdx, samplerCube shadowMap)
+{
+    vec3 fragToLight = worldPos - lightPos;
+    float currentDepth = length(fragToLight);
+    float farPlane = u_PointShadowFarPlanes[shadowIdx];
+
+    float bias = 0.05;
+
+    // Simple PCF with offset samples for cubemap
+    float shadow = 0.0;
+    float offset = 0.02;
+    int samples = 0;
+    for (float x = -offset; x <= offset; x += offset)
+    {
+        for (float y = -offset; y <= offset; y += offset)
         {
-            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
-            shadow += projCoords.z - bias > pcfDepth ? 1.0 : 0.0;
+            for (float z = -offset; z <= offset; z += offset)
+            {
+                float closestDepth = texture(shadowMap, fragToLight + vec3(x, y, z)).r;
+                closestDepth *= farPlane;  // Map from [0,1] to [0,farPlane]
+                shadow += currentDepth - bias > closestDepth ? 1.0 : 0.0;
+                samples++;
+            }
         }
     }
-    shadow /= 9.0;
+    shadow /= float(samples);
     return shadow;
+}
+
+float computePointShadow(vec3 worldPos, vec3 lightPos, int shadowIdx)
+{
+    switch (shadowIdx)
+    {
+        case 0: return computePointShadowForMap(worldPos, lightPos, 0, u_PointShadowMaps[0]);
+        case 1: return computePointShadowForMap(worldPos, lightPos, 1, u_PointShadowMaps[1]);
+        case 2: return computePointShadowForMap(worldPos, lightPos, 2, u_PointShadowMaps[2]);
+        case 3: return computePointShadowForMap(worldPos, lightPos, 3, u_PointShadowMaps[3]);
+        default: return 0.0;
+    }
 }
 
 // Cascaded Shadow Map computation
@@ -560,12 +730,20 @@ void main()
         float rangeFactor = clamp(1.0 - pow(dist / u_PointLightRanges[i], 4.0), 0.0, 1.0);
         attenuation *= rangeFactor * rangeFactor;
 
+        // Point light shadow
+        float pointShadow = 0.0;
+        if (u_PointShadowIndices[i] >= 0)
+        {
+            pointShadow = computePointShadow(worldPos, u_PointLightPositions[i], u_PointShadowIndices[i]);
+        }
+        float pointShadowFactor = 1.0 - pointShadow;
+
         vec3 radiance = u_PointLightColors[i] * u_PointLightIntensities[i] * attenuation;
-        Lo += computeRadiance(normal, V, L, radiance, albedo, metallic, roughness, F0);
+        Lo += computeRadiance(normal, V, L, radiance, albedo, metallic, roughness, F0) * pointShadowFactor;
 
         if (clearcoat > 0.0)
         {
-            ccLo += computeRadiance(normal, V, L, radiance, vec3(1.0), 0.0, clearcoatRoughness, vec3(0.04));
+            ccLo += computeRadiance(normal, V, L, radiance, vec3(1.0), 0.0, clearcoatRoughness, vec3(0.04)) * pointShadowFactor;
         }
 
         if (subsurface > 0.0)
@@ -575,7 +753,51 @@ void main()
             vec3 H_back = normalize(L + normal * 0.3);
             float VdotH_back = pow(clamp(dot(V, -H_back), 0.0, 1.0), 4.0);
             float thickness = 1.0 - max(dot(normal, V), 0.0);
-            sssLo += u_SubsurfaceColor * albedo * (NdotL_wrap + VdotH_back * thickness) * radiance;
+            sssLo += u_SubsurfaceColor * albedo * (NdotL_wrap + VdotH_back * thickness) * radiance * pointShadowFactor;
+        }
+    }
+
+    // Spot lights
+    for (int i = 0; i < u_NumSpotLights; ++i)
+    {
+        vec3 L = u_SpotLightPositions[i] - worldPos;
+        float dist = length(L);
+        L = normalize(L);
+
+        // Distance attenuation (same as point lights)
+        float attenuation = 1.0 / (dist * dist);
+        float rangeFactor = clamp(1.0 - pow(dist / u_SpotLightRanges[i], 4.0), 0.0, 1.0);
+        attenuation *= rangeFactor * rangeFactor;
+
+        // Cone attenuation: smooth falloff between inner and outer cone
+        float theta = dot(L, normalize(-u_SpotLightDirections[i]));
+        float spotFactor = smoothstep(u_SpotLightOuterCos[i], u_SpotLightInnerCos[i], theta);
+        attenuation *= spotFactor;
+
+        // Spot light shadow
+        float spotShadow = 0.0;
+        if (u_SpotShadowIndices[i] >= 0)
+        {
+            spotShadow = computeSpotShadow(worldPos, normal, L, u_SpotShadowIndices[i]);
+        }
+        float spotShadowFactor = 1.0 - spotShadow;
+
+        vec3 radiance = u_SpotLightColors[i] * u_SpotLightIntensities[i] * attenuation;
+        Lo += computeRadiance(normal, V, L, radiance, albedo, metallic, roughness, F0) * spotShadowFactor;
+
+        if (clearcoat > 0.0)
+        {
+            ccLo += computeRadiance(normal, V, L, radiance, vec3(1.0), 0.0, clearcoatRoughness, vec3(0.04)) * spotShadowFactor;
+        }
+
+        if (subsurface > 0.0)
+        {
+            float wrap = 0.5;
+            float NdotL_wrap = max(0.0, (dot(normal, L) + wrap) / (1.0 + wrap));
+            vec3 H_back = normalize(L + normal * 0.3);
+            float VdotH_back = pow(clamp(dot(V, -H_back), 0.0, 1.0), 4.0);
+            float thickness = 1.0 - max(dot(normal, V), 0.0);
+            sssLo += u_SubsurfaceColor * albedo * (NdotL_wrap + VdotH_back * thickness) * radiance * spotShadowFactor;
         }
     }
 
@@ -656,6 +878,38 @@ void main()
     }
 
     vec3 color = ambient + Lo + emissive;
+
+    // Apply fog
+    if (u_FogEnabled == 1)
+    {
+        float dist = length(worldPos - u_CameraPos);
+        float fogFactor;
+
+        if (u_FogMode == 0) // Linear
+        {
+            fogFactor = clamp((u_FogEnd - dist) / (u_FogEnd - u_FogStart), 0.0, 1.0);
+        }
+        else if (u_FogMode == 1) // Exponential
+        {
+            fogFactor = exp(-u_FogDensity * dist);
+        }
+        else // Exponential squared
+        {
+            float f = u_FogDensity * dist;
+            fogFactor = exp(-f * f);
+        }
+
+        // Height-based fog attenuation
+        if (u_FogHeightEnabled == 1)
+        {
+            float heightAbove = worldPos.y - u_FogHeightOffset;
+            float heightFactor = exp(-u_FogHeightFalloff * max(heightAbove, 0.0));
+            fogFactor = mix(1.0, fogFactor, heightFactor);
+        }
+
+        fogFactor = clamp(fogFactor, 0.0, 1.0);
+        color = mix(u_FogColor, color, fogFactor);
+    }
 
     FragColor = vec4(color, 1.0);
 }

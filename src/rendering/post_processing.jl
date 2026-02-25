@@ -9,6 +9,13 @@ Selectable tone mapping operator.
 @enum ToneMappingMode TONEMAP_REINHARD TONEMAP_ACES TONEMAP_UNCHARTED2
 
 """
+    FogMode
+
+Fog density function.
+"""
+@enum FogMode FOG_LINEAR FOG_EXPONENTIAL FOG_EXPONENTIAL2
+
+"""
     PostProcessConfig
 
 User-facing configuration for the post-processing pipeline.
@@ -48,6 +55,17 @@ mutable struct PostProcessConfig
     color_grading_contrast::Float32
     color_grading_saturation::Float32
 
+    # Fog
+    fog_enabled::Bool
+    fog_mode::FogMode
+    fog_color::Vec3f
+    fog_density::Float32
+    fog_start::Float32
+    fog_end::Float32
+    fog_height_enabled::Bool
+    fog_height_falloff::Float32
+    fog_height_offset::Float32
+
     PostProcessConfig(;
         bloom_enabled::Bool = false,
         bloom_threshold::Float32 = 1.0f0,
@@ -73,12 +91,23 @@ mutable struct PostProcessConfig
         color_grading_enabled::Bool = false,
         color_grading_brightness::Float32 = 0.0f0,
         color_grading_contrast::Float32 = 1.0f0,
-        color_grading_saturation::Float32 = 1.0f0
+        color_grading_saturation::Float32 = 1.0f0,
+        fog_enabled::Bool = false,
+        fog_mode::FogMode = FOG_EXPONENTIAL,
+        fog_color::Vec3f = Vec3f(0.7f0, 0.7f0, 0.8f0),
+        fog_density::Float32 = 0.02f0,
+        fog_start::Float32 = 10.0f0,
+        fog_end::Float32 = 200.0f0,
+        fog_height_enabled::Bool = false,
+        fog_height_falloff::Float32 = 0.1f0,
+        fog_height_offset::Float32 = 0.0f0
     ) = new(bloom_enabled, bloom_threshold, bloom_intensity,
             ssao_enabled, ssao_radius, ssao_samples,
             tone_mapping, fxaa_enabled, gamma,
             dof_enabled, dof_focus_distance, dof_focus_range, dof_bokeh_radius,
             motion_blur_enabled, motion_blur_intensity, motion_blur_samples, motion_blur_max_velocity,
             vignette_enabled, vignette_intensity, vignette_radius, vignette_softness,
-            color_grading_enabled, color_grading_brightness, color_grading_contrast, color_grading_saturation)
+            color_grading_enabled, color_grading_brightness, color_grading_contrast, color_grading_saturation,
+            fog_enabled, fog_mode, fog_color, fog_density, fog_start, fog_end,
+            fog_height_enabled, fog_height_falloff, fog_height_offset)
 end

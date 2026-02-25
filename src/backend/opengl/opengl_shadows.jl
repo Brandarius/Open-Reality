@@ -323,3 +323,216 @@ function render_csm_cascade!(csm::CascadedShadowMap, cascade_idx::Int, entities,
 
     return nothing
 end
+
+# =============================================================================
+# Spot Light Shadow Map
+# =============================================================================
+
+"""
+    SpotLightShadowMap
+
+Single-face depth map for spot light shadows, using a perspective projection
+with the spot light's outer cone angle as the FOV.
+"""
+mutable struct SpotLightShadowMap
+    fbo::GLuint
+    depth_texture::GLuint
+    resolution::Int
+    light_matrix::Mat4f  # View-projection from the spot light's perspective
+
+    SpotLightShadowMap(; resolution::Int = 1024) =
+        new(GLuint(0), GLuint(0), resolution, Mat4f(I))
+end
+
+function create_spot_shadow_map!(sm::SpotLightShadowMap)
+    tex_ref = Ref(GLuint(0))
+    glGenTextures(1, tex_ref)
+    sm.depth_texture = tex_ref[]
+    glBindTexture(GL_TEXTURE_2D, sm.depth_texture)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24,
+                 sm.resolution, sm.resolution, 0, GL_DEPTH_COMPONENT, GL_FLOAT, C_NULL)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER)
+    border_color = Float32[1.0, 1.0, 1.0, 1.0]
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border_color)
+
+    fbo_ref = Ref(GLuint(0))
+    glGenFramebuffers(1, fbo_ref)
+    sm.fbo = fbo_ref[]
+    glBindFramebuffer(GL_FRAMEBUFFER, sm.fbo)
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, sm.depth_texture, 0)
+    glDrawBuffer(GL_NONE)
+    glReadBuffer(GL_NONE)
+    glBindFramebuffer(GL_FRAMEBUFFER, GLuint(0))
+
+    return nothing
+end
+
+function destroy_spot_shadow_map!(sm::SpotLightShadowMap)
+    if sm.fbo != GLuint(0)
+        glDeleteFramebuffers(1, Ref(sm.fbo))
+        sm.fbo = GLuint(0)
+    end
+    if sm.depth_texture != GLuint(0)
+        glDeleteTextures(1, Ref(sm.depth_texture))
+        sm.depth_texture = GLuint(0)
+    end
+    return nothing
+end
+
+"""
+    compute_spot_light_matrix(position, direction, outer_cone, range) -> Mat4f
+
+Compute the view-projection matrix for a spot light shadow map.
+"""
+function compute_spot_light_matrix(position::Vec3f, direction::Vec3f, outer_cone::Float32, range::Float32)
+    # View matrix: look from light position along its direction
+    target = Vec3f(position[1] + direction[1], position[2] + direction[2], position[3] + direction[3])
+
+    # Choose an up vector that isn't parallel to direction
+    up = abs(direction[2]) < 0.99f0 ? Vec3f(0, 1, 0) : Vec3f(1, 0, 0)
+
+    forward = normalize(direction)
+    right = normalize(cross(forward, up))
+    actual_up = cross(right, forward)
+
+    # Manual lookat matrix
+    view_mat = Mat4f(
+        right[1], actual_up[1], -forward[1], 0,
+        right[2], actual_up[2], -forward[2], 0,
+        right[3], actual_up[3], -forward[3], 0,
+        -dot(right, position), -dot(actual_up, position), dot(forward, position), 1
+    )
+
+    # Perspective projection with cone angle as FOV
+    fov = 2.0f0 * outer_cone  # Full cone angle
+    fov = min(fov, Float32(π * 0.95))  # Clamp to avoid degenerate projection
+    aspect = 1.0f0
+    near = 0.1f0
+    far = range
+
+    f = 1.0f0 / tan(fov * 0.5f0)
+    proj_mat = Mat4f(
+        f/aspect, 0,  0,                            0,
+        0,        f,  0,                            0,
+        0,        0,  (far+near)/(near-far),       -1,
+        0,        0,  (2*far*near)/(near-far),      0
+    )
+
+    return proj_mat * view_mat
+end
+
+# =============================================================================
+# Point Light Shadow Map (Cubemap)
+# =============================================================================
+
+"""
+    PointLightShadowMap
+
+Cubemap depth map for omnidirectional point light shadows.
+Renders 6 faces per shadow-casting point light.
+"""
+mutable struct PointLightShadowMap
+    fbo::GLuint
+    depth_cubemap::GLuint
+    resolution::Int
+    light_matrices::Vector{Mat4f}  # 6 face view-projection matrices
+
+    PointLightShadowMap(; resolution::Int = 512) =
+        new(GLuint(0), GLuint(0), resolution, Mat4f[])
+end
+
+function create_point_shadow_map!(sm::PointLightShadowMap)
+    tex_ref = Ref(GLuint(0))
+    glGenTextures(1, tex_ref)
+    sm.depth_cubemap = tex_ref[]
+    glBindTexture(GL_TEXTURE_CUBE_MAP, sm.depth_cubemap)
+
+    for face in 0:5
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + UInt32(face), 0, GL_DEPTH_COMPONENT24,
+                     sm.resolution, sm.resolution, 0, GL_DEPTH_COMPONENT, GL_FLOAT, C_NULL)
+    end
+
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE)
+
+    fbo_ref = Ref(GLuint(0))
+    glGenFramebuffers(1, fbo_ref)
+    sm.fbo = fbo_ref[]
+
+    # FBO will bind individual faces during rendering
+    glBindFramebuffer(GL_FRAMEBUFFER, sm.fbo)
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                           GL_TEXTURE_CUBE_MAP_POSITIVE_X, sm.depth_cubemap, 0)
+    glDrawBuffer(GL_NONE)
+    glReadBuffer(GL_NONE)
+    glBindFramebuffer(GL_FRAMEBUFFER, GLuint(0))
+
+    return nothing
+end
+
+function destroy_point_shadow_map!(sm::PointLightShadowMap)
+    if sm.fbo != GLuint(0)
+        glDeleteFramebuffers(1, Ref(sm.fbo))
+        sm.fbo = GLuint(0)
+    end
+    if sm.depth_cubemap != GLuint(0)
+        glDeleteTextures(1, Ref(sm.depth_cubemap))
+        sm.depth_cubemap = GLuint(0)
+    end
+    return nothing
+end
+
+"""
+    compute_point_light_matrices(position, range) -> Vector{Mat4f}
+
+Compute 6 view-projection matrices for cubemap shadow rendering.
+Order: +X, -X, +Y, -Y, +Z, -Z
+"""
+function compute_point_light_matrices(position::Vec3f, range::Float32)
+    near = 0.1f0
+    far = range
+
+    # 90° FOV perspective projection (cubemap face)
+    f = 1.0f0  # tan(π/4) = 1
+    proj = Mat4f(
+        f, 0,  0,                            0,
+        0, f,  0,                            0,
+        0, 0,  (far+near)/(near-far),       -1,
+        0, 0,  (2*far*near)/(near-far),      0
+    )
+
+    # 6 cubemap face directions (target, up)
+    directions = [
+        (Vec3f( 1,  0,  0), Vec3f(0, -1,  0)),  # +X
+        (Vec3f(-1,  0,  0), Vec3f(0, -1,  0)),  # -X
+        (Vec3f( 0,  1,  0), Vec3f(0,  0,  1)),  # +Y
+        (Vec3f( 0, -1,  0), Vec3f(0,  0, -1)),  # -Y
+        (Vec3f( 0,  0,  1), Vec3f(0, -1,  0)),  # +Z
+        (Vec3f( 0,  0, -1), Vec3f(0, -1,  0)),  # -Z
+    ]
+
+    matrices = Mat4f[]
+    for (dir, up) in directions
+        target = Vec3f(position[1] + dir[1], position[2] + dir[2], position[3] + dir[3])
+        forward = normalize(dir)
+        right = normalize(cross(forward, up))
+        actual_up = cross(right, forward)
+
+        view_mat = Mat4f(
+            right[1], actual_up[1], -forward[1], 0,
+            right[2], actual_up[2], -forward[2], 0,
+            right[3], actual_up[3], -forward[3], 0,
+            -dot(right, position), -dot(actual_up, position), dot(forward, position), 1
+        )
+
+        push!(matrices, proj * view_mat)
+    end
+
+    return matrices
+end

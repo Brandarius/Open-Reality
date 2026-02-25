@@ -857,6 +857,29 @@ function render_deferred_lighting_pass!(backend::OpenGLBackend, pipeline::Deferr
     # Light uniforms
     upload_lights!(sp)
 
+    # Shadow softness uniforms
+    set_uniform!(sp, "u_ShadowSoftness", 1.0f0)
+    set_uniform!(sp, "u_ShadowPCSSEnabled", Int32(0))
+    set_uniform!(sp, "u_ShadowLightSize", 0.02f0)
+
+    # Fog uniforms
+    if backend.post_process !== nothing
+        fog_cfg = backend.post_process.config
+        set_uniform!(sp, "u_FogEnabled", Int32(fog_cfg.fog_enabled ? 1 : 0))
+        if fog_cfg.fog_enabled
+            set_uniform!(sp, "u_FogMode", Int32(Int(fog_cfg.fog_mode)))
+            set_uniform!(sp, "u_FogColor", fog_cfg.fog_color)
+            set_uniform!(sp, "u_FogDensity", fog_cfg.fog_density)
+            set_uniform!(sp, "u_FogStart", fog_cfg.fog_start)
+            set_uniform!(sp, "u_FogEnd", fog_cfg.fog_end)
+            set_uniform!(sp, "u_FogHeightEnabled", Int32(fog_cfg.fog_height_enabled ? 1 : 0))
+            set_uniform!(sp, "u_FogHeightFalloff", fog_cfg.fog_height_falloff)
+            set_uniform!(sp, "u_FogHeightOffset", fog_cfg.fog_height_offset)
+        end
+    else
+        set_uniform!(sp, "u_FogEnabled", Int32(0))
+    end
+
     # Cascaded Shadow Maps (CSM)
     if has_shadows && backend.csm !== nothing
         # Bind cascade shadow maps

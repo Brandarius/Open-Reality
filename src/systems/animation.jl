@@ -1,6 +1,37 @@
 # Animation system: advance time, interpolate keyframes, update transforms
 
 """
+    AnimationEventFired
+
+Event emitted on the event bus when an animation event triggers.
+"""
+struct AnimationEventFired
+    entity_id::EntityID
+    clip_name::String
+    event_name::String
+end
+
+"""
+    _time_crossed(prev_t, curr_t, event_t, duration, looping) -> Bool
+
+Check if playback time crossed an event time between prev_t and curr_t,
+correctly handling looping wrap-around.
+"""
+function _time_crossed(prev_t::Float64, curr_t::Float64, event_t::Float32, duration::Float32, looping::Bool)
+    et = Float64(event_t)
+    dur = Float64(duration)
+
+    if curr_t >= prev_t
+        # Normal forward progression (no wrap)
+        return prev_t <= et && et < curr_t
+    elseif looping
+        # Wrapped around: check [prev_t, duration) and [0, curr_t)
+        return (prev_t <= et && et < dur) || (0.0 <= et && et < curr_t)
+    end
+    return false
+end
+
+"""
     update_animations!(dt::Float64)
 
 Advance all playing AnimationComponents and apply interpolated keyframe
@@ -15,6 +46,9 @@ function update_animations!(dt::Float64)
 
         clip = anim.clips[anim.active_clip]
 
+        # Save previous time for event detection
+        prev_time = anim.current_time
+
         # Advance time
         anim.current_time += dt * Float64(anim.speed)
 
@@ -28,6 +62,27 @@ function update_animations!(dt::Float64)
         end
 
         t = Float32(anim.current_time)
+
+        # Fire animation events that were crossed this frame
+        for event in clip.events
+            if _time_crossed(prev_time, anim.current_time, event.time, clip.duration, anim.looping)
+                # Direct callback
+                if event.callback !== nothing
+                    try
+                        event.callback(eid, event)
+                    catch e
+                        @warn "Animation event callback error" entity=eid event=event.name exception=e
+                    end
+                end
+                # Emit on event bus (if available)
+                try
+                    bus = get_event_bus()
+                    emit!(bus, AnimationEventFired(eid, clip.name, event.name))
+                catch
+                    # Event bus may not be initialized
+                end
+            end
+        end
 
         # Evaluate each channel
         for channel in clip.channels

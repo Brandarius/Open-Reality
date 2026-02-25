@@ -21,6 +21,23 @@ struct AnimationChannel
 end
 
 """
+    AnimationEvent
+
+An event that fires when playback crosses a specific time in the clip.
+"""
+struct AnimationEvent
+    time::Float32                        # Time in the clip when this event fires
+    name::String                         # Event identifier (e.g., "footstep_left")
+    callback::Union{Function, Nothing}   # Optional direct callback (entity_id, event) -> nothing
+
+    AnimationEvent(;
+        time::Float32 = 0.0f0,
+        name::String = "",
+        callback::Union{Function, Nothing} = nothing
+    ) = new(time, name, callback)
+end
+
+"""
     AnimationClip
 
 A named collection of channels that play together.
@@ -29,6 +46,11 @@ struct AnimationClip
     name::String
     channels::Vector{AnimationChannel}
     duration::Float32
+    events::Vector{AnimationEvent}
+
+    AnimationClip(name::String, channels::Vector{AnimationChannel}, duration::Float32,
+                  events::Vector{AnimationEvent} = AnimationEvent[]) =
+        new(name, channels, duration, events)
 end
 
 """

@@ -115,6 +115,17 @@ uniform vec3 u_DirLightDirections[MAX_DIR_LIGHTS];
 uniform vec3 u_DirLightColors[MAX_DIR_LIGHTS];
 uniform float u_DirLightIntensities[MAX_DIR_LIGHTS];
 
+// Spot lights
+#define MAX_SPOT_LIGHTS 16
+uniform int u_NumSpotLights;
+uniform vec3 u_SpotLightPositions[MAX_SPOT_LIGHTS];
+uniform vec3 u_SpotLightDirections[MAX_SPOT_LIGHTS];
+uniform vec3 u_SpotLightColors[MAX_SPOT_LIGHTS];
+uniform float u_SpotLightIntensities[MAX_SPOT_LIGHTS];
+uniform float u_SpotLightRanges[MAX_SPOT_LIGHTS];
+uniform float u_SpotLightInnerCos[MAX_SPOT_LIGHTS];
+uniform float u_SpotLightOuterCos[MAX_SPOT_LIGHTS];
+
 const float PI = 3.14159265359;
 
 // Normal Distribution Function: Trowbridge-Reitz GGX
@@ -175,36 +186,43 @@ vec3 computeRadiance(vec3 N, vec3 V, vec3 L, vec3 radiance,
     return (kD * albedo / PI + specular) * radiance * NdotL;
 }
 
-// Shadow computation with 3x3 PCF
+// 16-sample Poisson disk for PCF
+const vec2 poissonDisk[16] = vec2[16](
+    vec2(-0.94201624, -0.39906216),  vec2( 0.94558609, -0.76890725),
+    vec2(-0.09418410, -0.92938870),  vec2( 0.34495938,  0.29387760),
+    vec2(-0.91588581,  0.45771432),  vec2(-0.81544232, -0.87912464),
+    vec2(-0.38277543,  0.27676845),  vec2( 0.97484398,  0.75648379),
+    vec2( 0.44323325, -0.97511554),  vec2( 0.53742981, -0.47373420),
+    vec2(-0.26496911, -0.41893023),  vec2( 0.79197514,  0.19090188),
+    vec2(-0.24188840,  0.99706507),  vec2(-0.81409955,  0.91437590),
+    vec2( 0.19984126,  0.78641367),  vec2( 0.14383161, -0.14100790)
+);
+
+// Shadow computation with 16-sample Poisson-disk PCF
 float computeShadow(vec4 fragPosLightSpace, vec3 N, vec3 L)
 {
-    // Perspective divide
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
     projCoords = projCoords * 0.5 + 0.5;
 
-    // Outside light frustum => no shadow
     if (projCoords.z > 1.0)
         return 0.0;
 
-    // Slope-scaled bias
     float bias = max(0.005 * (1.0 - dot(N, L)), 0.001);
 
-    // 3x3 PCF
     float shadow = 0.0;
     vec2 texelSize = 1.0 / textureSize(u_ShadowMap, 0);
-    for (int x = -1; x <= 1; ++x)
+    float filterRadius = texelSize.x * 3.0;
+
+    for (int i = 0; i < 16; ++i)
     {
-        for (int y = -1; y <= 1; ++y)
-        {
-            float pcfDepth = texture(u_ShadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
-            shadow += projCoords.z - bias > pcfDepth ? 1.0 : 0.0;
-        }
+        float pcfDepth = texture(u_ShadowMap, projCoords.xy + poissonDisk[i] * filterRadius).r;
+        shadow += projCoords.z - bias > pcfDepth ? 1.0 : 0.0;
     }
-    shadow /= 9.0;
+    shadow /= 16.0;
     return shadow;
 }
 
-// Helper: sample a single cascade shadow map (constant index avoids GLSL 3.3 dynamic-indexing limitation)
+// Helper: sample a single cascade shadow map with Poisson-disk PCF
 float computeShadowForCascade(vec3 worldPos, vec3 N, vec3 L, int cascadeIdx, sampler2D shadowMap, mat4 cascadeMatrix)
 {
     vec4 fragPosLightSpace = cascadeMatrix * vec4(worldPos, 1.0);
@@ -220,15 +238,14 @@ float computeShadowForCascade(vec3 worldPos, vec3 N, vec3 L, int cascadeIdx, sam
 
     float shadow = 0.0;
     vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
-    for (int x = -1; x <= 1; ++x)
+    float filterRadius = texelSize.x * 3.0;
+
+    for (int i = 0; i < 16; ++i)
     {
-        for (int y = -1; y <= 1; ++y)
-        {
-            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
-            shadow += projCoords.z - bias > pcfDepth ? 1.0 : 0.0;
-        }
+        float pcfDepth = texture(shadowMap, projCoords.xy + poissonDisk[i] * filterRadius).r;
+        shadow += projCoords.z - bias > pcfDepth ? 1.0 : 0.0;
     }
-    shadow /= 9.0;
+    shadow /= 16.0;
     return shadow;
 }
 
@@ -331,6 +348,25 @@ void main()
         Lo += computeRadiance(N, V, L, radiance, albedo, metallic, roughness, F0);
     }
 
+    // Spot lights
+    for (int i = 0; i < u_NumSpotLights; ++i)
+    {
+        vec3 L = u_SpotLightPositions[i] - v_WorldPos;
+        float dist = length(L);
+        L = normalize(L);
+
+        float attenuation = 1.0 / (dist * dist);
+        float rangeFactor = clamp(1.0 - pow(dist / u_SpotLightRanges[i], 4.0), 0.0, 1.0);
+        attenuation *= rangeFactor * rangeFactor;
+
+        float theta = dot(L, normalize(-u_SpotLightDirections[i]));
+        float spotFactor = smoothstep(u_SpotLightOuterCos[i], u_SpotLightInnerCos[i], theta);
+        attenuation *= spotFactor;
+
+        vec3 radiance = u_SpotLightColors[i] * u_SpotLightIntensities[i] * attenuation;
+        Lo += computeRadiance(N, V, L, radiance, albedo, metallic, roughness, F0);
+    }
+
     // Directional lights (first light casts shadows via CSM or single map)
     for (int i = 0; i < u_NumDirLights; ++i)
     {
@@ -397,4 +433,22 @@ function upload_lights!(sp::ShaderProgram)
         idx += 1
     end
     set_uniform!(sp, "u_NumDirLights", Int32(idx))
+
+    # Spot lights — iterate without allocating
+    idx = 0
+    iterate_components(SpotLightComponent) do eid, light
+        idx >= 16 && return
+        world = get_world_transform(eid)
+        pos = Vec3f(Float32(world[1, 4]), Float32(world[2, 4]), Float32(world[3, 4]))
+
+        set_uniform!(sp, "u_SpotLightPositions[$idx]", pos)
+        set_uniform!(sp, "u_SpotLightDirections[$idx]", light.direction)
+        set_uniform!(sp, "u_SpotLightColors[$idx]", light.color)
+        set_uniform!(sp, "u_SpotLightIntensities[$idx]", light.intensity)
+        set_uniform!(sp, "u_SpotLightRanges[$idx]", light.range)
+        set_uniform!(sp, "u_SpotLightInnerCos[$idx]", cos(light.inner_cone))
+        set_uniform!(sp, "u_SpotLightOuterCos[$idx]", cos(light.outer_cone))
+        idx += 1
+    end
+    set_uniform!(sp, "u_NumSpotLights", Int32(idx))
 end
