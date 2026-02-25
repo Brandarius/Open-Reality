@@ -48,9 +48,9 @@ final class MetalIntegrationTests: XCTestCase {
             -0.5, -0.5, 0.0,
             0.5, -0.5, 0.0
         ]
+        let vertexByteCount = vertices.count * MemoryLayout<Float>.stride
         let vertexBuf = vertices.withUnsafeMutableBufferPointer { ptr in
-            metal_create_buffer(deviceHandle, ptr.baseAddress!,
-                                vertices.count * MemoryLayout<Float>.stride, "vertices")
+            metal_create_buffer(deviceHandle, ptr.baseAddress!, vertexByteCount, "vertices")
         }
         XCTAssertNotEqual(vertexBuf, 0)
 

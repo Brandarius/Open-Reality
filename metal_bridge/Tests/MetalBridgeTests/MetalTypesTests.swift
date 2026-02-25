@@ -17,8 +17,6 @@ final class MetalTypesTests: XCTestCase {
 
     func testGetReturnsCorrectType() {
         let reg = HandleRegistry()
-        let wrapper = MetalBufferWrapper(buffer: nil) // We'll use NSObject instead
-        // Since MetalBufferWrapper needs a real MTLBuffer, let's use NSObject:
         let obj = NSObject()
         let handle = reg.insert(obj)
         let retrieved: NSObject? = reg.get(handle)

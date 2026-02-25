@@ -15,14 +15,15 @@ final class MetalBufferTests: XCTestCase {
         defer { registry.remove(deviceHandle) }
 
         var data: [Float] = [1.0, 2.0, 3.0, 4.0]
+        let byteCount = data.count * MemoryLayout<Float>.stride
         let handle = data.withUnsafeMutableBufferPointer { ptr in
-            metal_create_buffer(deviceHandle, ptr.baseAddress!, data.count * MemoryLayout<Float>.stride, "test_buffer")
+            metal_create_buffer(deviceHandle, ptr.baseAddress!, byteCount, "test_buffer")
         }
 
         XCTAssertNotEqual(handle, 0)
 
         let length = metal_get_buffer_length(handle)
-        XCTAssertEqual(length, data.count * MemoryLayout<Float>.stride)
+        XCTAssertEqual(length, byteCount)
 
         metal_destroy_buffer(handle)
     }
@@ -48,15 +49,17 @@ final class MetalBufferTests: XCTestCase {
 
         // Create buffer with initial data
         var initial: [Float] = [0.0, 0.0, 0.0, 0.0]
+        let initialByteCount = initial.count * MemoryLayout<Float>.stride
         let handle = initial.withUnsafeMutableBufferPointer { ptr in
-            metal_create_buffer(deviceHandle, ptr.baseAddress!, initial.count * MemoryLayout<Float>.stride, "update_test")
+            metal_create_buffer(deviceHandle, ptr.baseAddress!, initialByteCount, "update_test")
         }
         XCTAssertNotEqual(handle, 0)
 
         // Update with new data
         var updated: [Float] = [1.0, 2.0, 3.0, 4.0]
+        let updatedByteCount = updated.count * MemoryLayout<Float>.stride
         updated.withUnsafeMutableBufferPointer { ptr in
-            metal_update_buffer(handle, ptr.baseAddress!, 0, updated.count * MemoryLayout<Float>.stride)
+            metal_update_buffer(handle, ptr.baseAddress!, 0, updatedByteCount)
         }
 
         // Verify via MetalBufferWrapper

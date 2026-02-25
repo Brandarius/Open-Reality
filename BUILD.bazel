@@ -53,3 +53,8 @@ alias(
     actual = "//openreality-web:openreality_web_pkg",
     tags = ["manual"],
 )
+
+alias(
+    name = "swift_tests",
+    actual = "//metal_bridge:MetalBridgeTests",
+)
