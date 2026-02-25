@@ -1236,7 +1236,7 @@
           "@@//openreality-web/Cargo.toml": "176e88e918e264ac568e5141a5db6f7801c49c646c6f328fb75214d67189c07b",
           "@@//Cargo.lock": "7912b5d6475d2edaefbd5a375f62e09b4bcb0450e5f2f61106b75949622bf657",
           "@@//openreality-cli/Cargo.toml": "ad08d608b7c042703b30503c65ef7741194dca2c9c22e7a683970c2af3a82fb2",
-          "@@//MODULE.bazel": "10a9de5246bd3b94fe81120c1bfc27c08fc432c949e9957632a92eefb0890f29",
+          "@@//MODULE.bazel": "7fef19ffbdedebbc7d18fce70cc2a3ac37a69f8461cdc777137ac5a320362be7",
           "@@rules_rust~~rust_host_tools~rust_host_tools//rust_host_tools": "ENOENT"
         },
         "recordedDirentsInputs": {},

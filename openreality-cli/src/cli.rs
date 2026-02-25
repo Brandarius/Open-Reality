@@ -39,6 +39,9 @@ pub enum Command {
     Run {
         /// Path to the .jl file to run
         file: String,
+        /// Warm the shader cache before running (pre-compiles all shaders)
+        #[arg(long)]
+        warm_cache: bool,
     },
     /// Build targets (backends, desktop, web, mobile)
     Build {
@@ -69,6 +72,25 @@ pub enum Command {
     },
     /// Run the Julia test suite
     Test,
+    /// Manage the shader cache
+    Cache {
+        #[command(subcommand)]
+        action: CacheAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum CacheAction {
+    /// Pre-compile and cache all shader variants
+    Shaders {
+        /// Backend to warm cache for (opengl, vulkan)
+        #[arg(short, long, default_value = "opengl")]
+        backend: String,
+    },
+    /// Clear the shader cache
+    Clear,
+    /// Show shader cache statistics
+    Status,
 }
 
 #[derive(Subcommand)]
@@ -236,7 +258,10 @@ mod tests {
     fn test_cli_run() {
         let cli = Cli::try_parse_from(["orcli", "run", "scene.jl"]).unwrap();
         match cli.command.unwrap() {
-            Command::Run { file } => assert_eq!(file, "scene.jl"),
+            Command::Run { file, warm_cache } => {
+                assert_eq!(file, "scene.jl");
+                assert!(!warm_cache);
+            }
             _ => panic!("Expected Run command"),
         }
     }

@@ -1,4 +1,5 @@
 pub mod build_cmd;
+pub mod cache_cmd;
 pub mod export;
 pub mod init;
 pub mod new;

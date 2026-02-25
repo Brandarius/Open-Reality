@@ -141,6 +141,7 @@ include("rendering/texture.jl")            # placeholder — concrete type in ba
 include("rendering/framebuffer.jl")        # placeholder — concrete type in backend/opengl/
 include("rendering/gbuffer.jl")            # placeholder — concrete type in backend/opengl/
 include("rendering/shader_variants.jl")    # ShaderLibrary{S} (parametric, backend-agnostic)
+include("rendering/shader_cache.jl")      # Persistent disk-based shader cache
 include("rendering/ibl.jl")                # placeholder — concrete type in backend/opengl/
 include("rendering/ssr.jl")                # placeholder — concrete type in backend/opengl/
 include("rendering/ssao.jl")               # pure math (generate_ssao_kernel, lerp)
@@ -481,6 +482,8 @@ export FEATURE_AO_MAP, FEATURE_EMISSIVE_MAP, FEATURE_ALPHA_CUTOFF
 export FEATURE_CLEARCOAT, FEATURE_PARALLAX_MAPPING, FEATURE_SUBSURFACE
 export FEATURE_LOD_DITHER, FEATURE_INSTANCED, FEATURE_TERRAIN_SPLATMAP
 export get_or_compile_variant!, determine_shader_variant, destroy_shader_library!
+export ShaderCache, init_shader_cache!, cache_clear!, flush_shader_cache!
+export get_shader_cache, shader_cache_key, cache_lookup, cache_store!
 export DeferredPipeline, create_deferred_pipeline!, destroy_deferred_pipeline!, resize_deferred_pipeline!
 
 # Export SSR

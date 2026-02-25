@@ -1,6 +1,23 @@
 use crate::project::ProjectContext;
 
-pub async fn run(file: String, ctx: ProjectContext) -> anyhow::Result<()> {
+pub async fn run(file: String, warm_cache: bool, ctx: ProjectContext) -> anyhow::Result<()> {
+    if warm_cache {
+        println!("Warming shader cache...");
+        let julia_code = r#"using OpenReality; OpenReality._warm_shader_cache!("opengl")"#;
+        let warm_status = tokio::process::Command::new("julia")
+            .args(["--project=.", "-e", julia_code])
+            .current_dir(&ctx.project_root)
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status()
+            .await?;
+
+        if !warm_status.success() {
+            eprintln!("Warning: shader cache warming failed, continuing anyway...");
+        }
+    }
+
     let status = tokio::process::Command::new("julia")
         .args(["--project=.", &file])
         .current_dir(&ctx.project_root)

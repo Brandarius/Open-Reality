@@ -2,3 +2,4 @@
 target
 bazel-*
 .swiftpm
+.openreality/shader_cache/

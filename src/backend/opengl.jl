@@ -59,6 +59,10 @@ function initialize!(backend::OpenGLBackend;
     glEnable(GL_MULTISAMPLE)
     glClearColor(0.1f0, 0.1f0, 0.1f0, 1.0f0)
 
+    # Initialize shader cache (before any shader compilation)
+    _capture_gl_driver_info!()
+    init_shader_cache!(_find_project_root())
+
     # Initialize rendering pipeline
     if backend.use_deferred
         # Deferred rendering pipeline
@@ -115,6 +119,7 @@ function shutdown!(backend::OpenGLBackend)
         backend.post_process = nothing
     end
     reset_instance_buffer!()
+    flush_shader_cache!()
     if backend.window !== nothing
         destroy_window!(backend.window)
         backend.window = nothing

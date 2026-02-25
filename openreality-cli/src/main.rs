@@ -44,9 +44,9 @@ async fn main() -> Result<()> {
                 cli::NewKind::Scene { name } => commands::new::scene(name, ctx).await,
             }
         }
-        Some(cli::Command::Run { file }) => {
+        Some(cli::Command::Run { file, warm_cache }) => {
             let ctx = project::detect_project_context()?;
-            commands::run_cmd::run(file, ctx).await
+            commands::run_cmd::run(file, warm_cache, ctx).await
         }
         Some(cli::Command::Build { target }) => {
             let ctx = project::detect_project_context()?;
@@ -69,6 +69,10 @@ async fn main() -> Result<()> {
         Some(cli::Command::Test) => {
             let ctx = project::detect_project_context()?;
             commands::test_cmd::run(ctx).await
+        }
+        Some(cli::Command::Cache { action }) => {
+            let ctx = project::detect_project_context()?;
+            commands::cache_cmd::run(action, ctx).await
         }
     }
 }

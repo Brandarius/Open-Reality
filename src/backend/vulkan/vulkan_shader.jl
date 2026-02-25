@@ -11,11 +11,25 @@ using glslang_jll
 
 Compile GLSL source to SPIR-V bytecode using glslangValidator.
 `stage` should be :vert, :frag, :comp, :geom, :tesc, or :tese.
+Uses the persistent shader cache when available — SPIR-V is driver-independent
+so no vendor fingerprint is needed in the cache key.
 """
 function vk_compile_glsl_to_spirv(source::String, stage::Symbol)
     stage_str = String(stage)
 
-    # Write source to temp file
+    # --- Try loading from cache ---
+    cache = get_shader_cache()
+    if cache.enabled
+        key = shader_cache_key(source, stage_str)
+        cached_data = cache_lookup(key)
+        if cached_data !== nothing
+            spv_words = reinterpret(UInt32, cached_data)
+            @debug "SPIR-V loaded from cache" key=key stage=stage
+            return Vector{UInt32}(spv_words)
+        end
+    end
+
+    # --- Normal compilation path ---
     tmp_src = tempname() * ".glsl"
     tmp_spv = tempname() * ".spv"
 
@@ -37,7 +51,16 @@ function vk_compile_glsl_to_spirv(source::String, stage::Symbol)
         # Read compiled SPIR-V
         spv_bytes = read(tmp_spv)
         spv_words = reinterpret(UInt32, spv_bytes)
-        return Vector{UInt32}(spv_words)
+        result = Vector{UInt32}(spv_words)
+
+        # --- Store in cache ---
+        if cache.enabled
+            cache_store!(key, Vector{UInt8}(spv_bytes), "vulkan";
+                        source_hash=hash(source))
+            @debug "SPIR-V cached" key=key stage=stage size=length(spv_bytes)
+        end
+
+        return result
     finally
         isfile(tmp_src) && rm(tmp_src)
         isfile(tmp_spv) && rm(tmp_spv)

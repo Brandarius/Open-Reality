@@ -416,6 +416,9 @@ function initialize!(backend::VulkanBackend; width::Int=1280, height::Int=720, t
     # Create shadow sampler
     backend.shadow_sampler = vk_create_shadow_sampler(backend.device)
 
+    # Initialize shader cache (before any shader compilation)
+    init_shader_cache!(_find_project_root())
+
     # Create deferred pipeline
     backend.post_process_config = PostProcessConfig()
     backend.deferred_pipeline = vk_create_deferred_pipeline(
@@ -617,6 +620,9 @@ function shutdown!(backend::VulkanBackend)
 
     # Destroy pipeline cache
     vk_destroy_all_cached_pipelines!(backend.device)
+
+    # Flush shader cache manifest
+    flush_shader_cache!()
 
     # Destroy swapchain resources
     vk_destroy_swapchain_resources!(backend)
