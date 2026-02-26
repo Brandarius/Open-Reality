@@ -13,11 +13,7 @@ concurrency:
 jobs:
   julia-tests:
     name: Julia Tests
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -27,8 +23,7 @@ jobs:
 
       - uses: julia-actions/cache@v2
 
-      - name: Install system dependencies (Linux)
-        if: runner.os == 'Linux'
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -42,8 +37,7 @@ jobs:
             mesa-vulkan-drivers \
             libfreetype6-dev
 
-      - name: Run tests (Linux)
-        if: runner.os == 'Linux'
+      - name: Run tests
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" \
             julia --project=. -e '
@@ -51,17 +45,6 @@ jobs:
               Pkg.instantiate()
               Pkg.test()
             '
-        env:
-          OPENREALITY_NO_SHADER_CACHE: "1"
-
-      - name: Run tests (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          julia --project=. -e '
-            using Pkg
-            Pkg.instantiate()
-            Pkg.test()
-          '
         env:
           OPENREALITY_NO_SHADER_CACHE: "1"
 
