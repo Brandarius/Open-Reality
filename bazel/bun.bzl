@@ -30,28 +30,29 @@ def _bun_install_impl(ctx):
         outputs = [node_modules],
         command = """
             set -e
-            # Copy package.json (and lockfile if present) into a temp working dir
+            # Capture the execroot so relative Bazel paths survive 'cd'
+            EXECROOT="$(pwd)"
+
             WORK_DIR=$(mktemp -d)
-            cp "{package_json}" "${{WORK_DIR}}/package.json"
+            cp "${{EXECROOT}}/{package_json}" "${{WORK_DIR}}/package.json"
             {copy_lockfile}
 
             cd "${{WORK_DIR}}"
-            "{bun}" install --frozen-lockfile
+            "${{EXECROOT}}/{bun}" install --frozen-lockfile
 
             # Move the installed node_modules to the Bazel output
-            cp -r "${{WORK_DIR}}/node_modules/." "{output}/"
+            cp -r "${{WORK_DIR}}/node_modules/." "${{EXECROOT}}/{output}/"
             rm -rf "${{WORK_DIR}}"
         """.format(
             package_json = package_json.path,
             bun = bun_bin.path,
             output = node_modules.path,
-            copy_lockfile = 'cp "{}" "${{WORK_DIR}}/bun.lock"'.format(lockfile.path) if lockfile else "",
+            copy_lockfile = 'cp "${{EXECROOT}}/{}" "${{WORK_DIR}}/bun.lock"'.format(lockfile.path) if lockfile else "",
         ),
         mnemonic = "BunInstall",
         progress_message = "Installing Bun dependencies for %s" % ctx.label,
         execution_requirements = {
             "requires-network": "1",
-            "no-sandbox": "1",
         },
     )
     return [DefaultInfo(files = depset([node_modules]))]
