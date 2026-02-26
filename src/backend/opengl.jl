@@ -857,6 +857,18 @@ function render_deferred_lighting_pass!(backend::OpenGLBackend, pipeline::Deferr
     # Light uniforms
     upload_lights!(sp)
 
+    # Initialize spot/point shadow uniforms to safe defaults (no shadows)
+    # Without this, GLSL int uniforms default to 0 and u_PointShadowIndices[i] >= 0
+    # is always true, sending every light into the shadow computation path
+    set_uniform!(sp, "u_NumSpotShadowMaps", Int32(0))
+    set_uniform!(sp, "u_NumPointShadowMaps", Int32(0))
+    for i in 0:15   # MAX_SPOT_LIGHTS - 1
+        set_uniform!(sp, "u_SpotShadowIndices[$i]", Int32(-1))
+    end
+    for i in 0:15   # MAX_POINT_LIGHTS - 1
+        set_uniform!(sp, "u_PointShadowIndices[$i]", Int32(-1))
+    end
+
     # Shadow softness uniforms
     set_uniform!(sp, "u_ShadowSoftness", 1.0f0)
     set_uniform!(sp, "u_ShadowPCSSEnabled", Int32(0))
@@ -905,6 +917,22 @@ function render_deferred_lighting_pass!(backend::OpenGLBackend, pipeline::Deferr
     else
         set_uniform!(sp, "u_HasShadows", Int32(0))
         set_uniform!(sp, "u_NumCascades", Int32(0))
+    end
+
+    # Bind placeholder textures for spot/point shadow samplers to prevent
+    # samplerCube/sampler2D type mismatch (samplerCube defaulting to unit 0
+    # with GL_TEXTURE_2D bound causes GL_INVALID_OPERATION)
+    for i in 0:3  # MAX_SPOT_SHADOW_MAPS - 1
+        glActiveTexture(GL_TEXTURE0 + UInt32(next_unit))
+        glBindTexture(GL_TEXTURE_2D, pipeline.placeholder_2d)
+        set_uniform!(sp, "u_SpotShadowMaps[$i]", Int32(next_unit))
+        next_unit += 1
+    end
+    for i in 0:3  # MAX_POINT_SHADOW_MAPS - 1
+        glActiveTexture(GL_TEXTURE0 + UInt32(next_unit))
+        glBindTexture(GL_TEXTURE_CUBE_MAP, pipeline.placeholder_cubemap)
+        set_uniform!(sp, "u_PointShadowMaps[$i]", Int32(next_unit))
+        next_unit += 1
     end
 
     # IBL (Image-Based Lighting)

@@ -158,6 +158,7 @@ Check if an entity has a component of the specified type.
 function has_component(ark_entity::EntityID, ::Type{T})::Bool where T <: Component
     world = World()
     ark_entity === nothing && return false
+    Ark.is_alive(world, ark_entity) || return false
     return Ark.has_components(world, ark_entity, (T,))
 end
 

@@ -337,7 +337,7 @@ void main()
 const DEFERRED_LIGHTING_FRAGMENT_SHADER = """
 #version 330 core
 
-#define MAX_POINT_LIGHTS 64
+#define MAX_POINT_LIGHTS 16
 #define MAX_DIR_LIGHTS 8
 #define MAX_SPOT_LIGHTS 16
 

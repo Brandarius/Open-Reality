@@ -2,7 +2,7 @@
 
 julia_version = "1.12.4"
 manifest_format = "2.0"
-project_hash = "d2d7064b2fcf537d80db7d458d7d504558578054"
+project_hash = "480e1a8dcc57a7a863b62fdc2340d7c35e349034"
 
 [[deps.Accessors]]
 deps = ["CompositionsBase", "ConstructionBase", "Dates", "InverseFunctions", "MacroTools"]
@@ -33,16 +33,28 @@ uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
 version = "1.1.2"
 
 [[deps.Ark]]
-deps = ["FieldViews", "FunctionWrappers", "StaticArrays"]
-git-tree-sha1 = "024cbd7caff9bbd42beff76fd7cdf2e9cf13190c"
+deps = ["FieldViews", "FunctionWrappers", "PrecompileTools", "Preferences", "Random", "StaticArrays"]
+git-tree-sha1 = "b9e83c4a75f4a218daf487689193c5be29487ea7"
 uuid = "56664e29-41e4-4ea5-ab0e-825499acc647"
-version = "0.3.2"
+version = "0.4.0"
 
     [deps.Ark.extensions]
+    ArkAMDGPUInterop = "AMDGPU"
+    ArkCUDAInterop = "CUDA"
+    ArkMetalInterop = "Metal"
     ArkMooncakeInterop = "Mooncake"
+    ArkOpenCLInterop = "OpenCL"
+    ArkUniqueVectorsInterop = "UniqueVectors"
+    ArkoneAPIInterop = "oneAPI"
 
     [deps.Ark.weakdeps]
+    AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+    Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
     Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
+    OpenCL = "08131aa3-fb12-5dee-8b74-c09406e224a2"
+    UniqueVectors = "2fbcfb34-fd0c-5fbb-b5d7-e826d8f5b0a9"
+    oneAPI = "8f75cd03-7ff8-4ecb-9b8f-daf728133b1b"
 
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
@@ -755,7 +767,7 @@ uuid = "18a262bb-aa17-5467-a713-aee519bc75cb"
 version = "3.4.4+0"
 
 [[deps.OpenReality]]
-deps = ["Ark", "Base64", "ColorTypes", "FileIO", "FreeTypeAbstraction", "GLFW", "GLTF", "GeometryBasics", "ImageIO", "LinearAlgebra", "MeshIO", "ModernGL", "Observables", "OpenAL_jll", "Quaternions", "Serialization", "StaticArrays", "Vulkan", "glslang_jll"]
+deps = ["Ark", "Base64", "ColorTypes", "FileIO", "FreeTypeAbstraction", "GLFW", "GLTF", "GeometryBasics", "ImageIO", "LinearAlgebra", "MeshIO", "ModernGL", "Observables", "OpenAL_jll", "Quaternions", "Serialization", "StaticArrays", "TOML", "Vulkan", "glslang_jll"]
 path = "."
 uuid = "b08b1914-4d33-46de-8c63-ba029b7f1c5f"
 version = "0.1.0"
