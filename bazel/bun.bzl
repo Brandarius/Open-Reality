@@ -42,6 +42,9 @@ def _bun_install_impl(ctx):
 
             # Move the installed node_modules to the Bazel output
             cp -r "${{WORK_DIR}}/node_modules/." "${{EXECROOT}}/{output}/"
+            # Remove Bun cache — it contains dangling symlinks that Bazel
+            # rejects inside tree artifacts (declared directories).
+            rm -rf "${{EXECROOT}}/{output}/.bun-cache"
             rm -rf "${{WORK_DIR}}"
         """.format(
             package_json = package_json.path,

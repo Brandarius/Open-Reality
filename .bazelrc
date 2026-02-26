@@ -1,6 +1,7 @@
 # Platform configuration
 build --enable_platform_specific_config
 build:macos --apple_platform_type=macos
+build:macos --extra_toolchains=@apple_support//toolchains:all
 
 # Test output
 test --test_output=errors

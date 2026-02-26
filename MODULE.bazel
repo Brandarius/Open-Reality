@@ -52,6 +52,7 @@ use_repo(bun, "bun_toolchains")
 register_toolchains("@bun_toolchains//:bun_toolchain")
 
 # ============================================================
-# Swift (macOS only, for Metal bridge)
+# Swift / Apple (macOS only, for Metal bridge)
 # ============================================================
+bazel_dep(name = "apple_support", version = "2.3.0")
 bazel_dep(name = "rules_swift", version = "3.4.2")
