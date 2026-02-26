@@ -71,10 +71,13 @@ def _bun_download_impl(repository_ctx):
     repository_ctx.download_and_extract(
         url = url,
         sha256 = platform_info["sha256"],
-        stripPrefix = platform_info["strip_prefix"],
     )
 
-    # Ensure the binary is executable (zip extraction may strip permissions)
+    # Move binary from extracted subdirectory to repo root
+    # (don't rely on stripPrefix which can silently fail)
+    subdir = platform_info["strip_prefix"]
+    repository_ctx.execute(["mv", subdir + "/bun", "bun"])
+    repository_ctx.execute(["rm", "-rf", subdir])
     repository_ctx.execute(["chmod", "+x", "bun"])
 
     toolchain_type = repository_ctx.attr.toolchain_type

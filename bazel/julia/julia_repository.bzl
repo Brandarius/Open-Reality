@@ -72,10 +72,14 @@ def _julia_download_impl(repository_ctx):
     repository_ctx.download_and_extract(
         url = url,
         sha256 = platform_info["sha256"],
-        stripPrefix = platform_info["strip_prefix"],
     )
 
-    # Ensure the binary is executable (archive extraction may strip permissions)
+    # Move contents from extracted subdirectory to repo root
+    # (don't rely on stripPrefix which can silently fail)
+    subdir = platform_info["strip_prefix"]
+    result = repository_ctx.execute(["bash", "-c", "mv {subdir}/* . && rm -rf {subdir}".format(subdir = subdir)])
+    if result.return_code != 0:
+        fail("Failed to move Julia files from {}: {}".format(subdir, result.stderr))
     repository_ctx.execute(["chmod", "+x", "bin/julia"])
 
     toolchain_type = repository_ctx.attr.toolchain_type
