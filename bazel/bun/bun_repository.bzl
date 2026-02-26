@@ -74,6 +74,9 @@ def _bun_download_impl(repository_ctx):
         stripPrefix = platform_info["strip_prefix"],
     )
 
+    # Ensure the binary is executable (zip extraction may strip permissions)
+    repository_ctx.execute(["chmod", "+x", "bun"])
+
     toolchain_type = repository_ctx.attr.toolchain_type
 
     # Generate the toolchain rule locally so we don't need cross-repo loads.
