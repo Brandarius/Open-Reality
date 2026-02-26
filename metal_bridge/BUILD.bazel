@@ -36,4 +36,5 @@ swift_test(
         "no-sandbox",
         "local",
     ],
+    visibility = ["//visibility:public"],
 )

@@ -47,6 +47,7 @@ def _julia_precompile_impl(ctx):
         ),
         mnemonic = "JuliaPrecompile",
         progress_message = "Precompiling Julia packages",
+        use_default_shell_env = True,
         execution_requirements = {"requires-network": "1"},
     )
     return [DefaultInfo(files = depset([marker, depot]))]
