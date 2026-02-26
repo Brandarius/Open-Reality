@@ -7061,122 +7061,134 @@ using StaticArrays
         end
 
         @testset "init_shader_cache! creates directory structure" begin
-            mktempdir() do tmpdir
-                # Reset shader cache
-                cache = get_shader_cache()
-                cache.enabled = false
-                empty!(cache.manifest)
+            # Temporarily unset OPENREALITY_NO_SHADER_CACHE so init_shader_cache! enables the cache
+            withenv("OPENREALITY_NO_SHADER_CACHE" => nothing) do
+                mktempdir() do tmpdir
+                    cache = get_shader_cache()
+                    cache.enabled = false
+                    empty!(cache.manifest)
 
-                init_shader_cache!(tmpdir)
-                @test cache.enabled
-                @test isdir(joinpath(tmpdir, ".openreality", "shader_cache", "opengl"))
-                @test isdir(joinpath(tmpdir, ".openreality", "shader_cache", "vulkan"))
+                    init_shader_cache!(tmpdir)
+                    @test cache.enabled
+                    @test isdir(joinpath(tmpdir, ".openreality", "shader_cache", "opengl"))
+                    @test isdir(joinpath(tmpdir, ".openreality", "shader_cache", "vulkan"))
 
-                # Cleanup
-                cache.enabled = false
-                empty!(cache.manifest)
+                    # Cleanup
+                    cache.enabled = false
+                    empty!(cache.manifest)
+                end
             end
         end
 
         @testset "cache_store! and cache_lookup round-trip" begin
-            mktempdir() do tmpdir
-                cache = get_shader_cache()
-                cache.enabled = false
-                empty!(cache.manifest)
+            withenv("OPENREALITY_NO_SHADER_CACHE" => nothing) do
+                mktempdir() do tmpdir
+                    cache = get_shader_cache()
+                    cache.enabled = false
+                    empty!(cache.manifest)
 
-                init_shader_cache!(tmpdir)
+                    init_shader_cache!(tmpdir)
 
-                key = shader_cache_key("test_vertex", "test_fragment")
-                data = UInt8[0x01, 0x02, 0x03, 0x04, 0x05]
+                    key = shader_cache_key("test_vertex", "test_fragment")
+                    data = UInt8[0x01, 0x02, 0x03, 0x04, 0x05]
 
-                cache_store!(key, data, "opengl")
-                result = cache_lookup(key)
-                @test result !== nothing
-                @test result == data
+                    cache_store!(key, data, "opengl")
+                    result = cache_lookup(key)
+                    @test result !== nothing
+                    @test result == data
 
-                # Cleanup
-                cache.enabled = false
-                empty!(cache.manifest)
+                    # Cleanup
+                    cache.enabled = false
+                    empty!(cache.manifest)
+                end
             end
         end
 
         @testset "cache_lookup returns nothing for missing key" begin
-            mktempdir() do tmpdir
-                cache = get_shader_cache()
-                cache.enabled = false
-                empty!(cache.manifest)
+            withenv("OPENREALITY_NO_SHADER_CACHE" => nothing) do
+                mktempdir() do tmpdir
+                    cache = get_shader_cache()
+                    cache.enabled = false
+                    empty!(cache.manifest)
 
-                init_shader_cache!(tmpdir)
+                    init_shader_cache!(tmpdir)
 
-                result = cache_lookup("nonexistent_key")
-                @test result === nothing
+                    result = cache_lookup("nonexistent_key")
+                    @test result === nothing
 
-                cache.enabled = false
-                empty!(cache.manifest)
+                    cache.enabled = false
+                    empty!(cache.manifest)
+                end
             end
         end
 
         @testset "cache_store! vulkan uses .spv extension" begin
-            mktempdir() do tmpdir
-                cache = get_shader_cache()
-                cache.enabled = false
-                empty!(cache.manifest)
+            withenv("OPENREALITY_NO_SHADER_CACHE" => nothing) do
+                mktempdir() do tmpdir
+                    cache = get_shader_cache()
+                    cache.enabled = false
+                    empty!(cache.manifest)
 
-                init_shader_cache!(tmpdir)
+                    init_shader_cache!(tmpdir)
 
-                key = "vulkan_test_key"
-                data = UInt8[0x03, 0x02, 0x23, 0x07]  # SPIR-V magic number
-                cache_store!(key, data, "vulkan")
+                    key = "vulkan_test_key"
+                    data = UInt8[0x03, 0x02, 0x23, 0x07]  # SPIR-V magic number
+                    cache_store!(key, data, "vulkan")
 
-                entry = cache.manifest[key]
-                @test entry.backend == "vulkan"
-                @test endswith(entry.file_path, ".spv")
+                    entry = cache.manifest[key]
+                    @test entry.backend == "vulkan"
+                    @test endswith(entry.file_path, ".spv")
 
-                cache.enabled = false
-                empty!(cache.manifest)
+                    cache.enabled = false
+                    empty!(cache.manifest)
+                end
             end
         end
 
         @testset "cache_clear! removes everything" begin
-            mktempdir() do tmpdir
-                cache = get_shader_cache()
-                cache.enabled = false
-                empty!(cache.manifest)
+            withenv("OPENREALITY_NO_SHADER_CACHE" => nothing) do
+                mktempdir() do tmpdir
+                    cache = get_shader_cache()
+                    cache.enabled = false
+                    empty!(cache.manifest)
 
-                init_shader_cache!(tmpdir)
+                    init_shader_cache!(tmpdir)
 
-                key = shader_cache_key("clear_test")
-                cache_store!(key, UInt8[0x01], "opengl")
-                @test length(cache.manifest) == 1
+                    key = shader_cache_key("clear_test")
+                    cache_store!(key, UInt8[0x01], "opengl")
+                    @test length(cache.manifest) == 1
 
-                cache_clear!()
-                @test isempty(cache.manifest)
-                @test !isdir(joinpath(tmpdir, ".openreality", "shader_cache"))
+                    cache_clear!()
+                    @test isempty(cache.manifest)
+                    @test !isdir(joinpath(tmpdir, ".openreality", "shader_cache"))
 
-                cache.enabled = false
+                    cache.enabled = false
+                end
             end
         end
 
         @testset "cache_lookup removes stale manifest entries" begin
-            mktempdir() do tmpdir
-                cache = get_shader_cache()
-                cache.enabled = false
-                empty!(cache.manifest)
+            withenv("OPENREALITY_NO_SHADER_CACHE" => nothing) do
+                mktempdir() do tmpdir
+                    cache = get_shader_cache()
+                    cache.enabled = false
+                    empty!(cache.manifest)
 
-                init_shader_cache!(tmpdir)
+                    init_shader_cache!(tmpdir)
 
-                # Manually add a manifest entry pointing to a non-existent file
-                cache.manifest["stale_key"] = OpenReality.ShaderCacheEntry(
-                    "stale_key", "opengl", UInt64(0), UInt64(0),
-                    "opengl/stale_key.bin", time(), Int64(0)
-                )
+                    # Manually add a manifest entry pointing to a non-existent file
+                    cache.manifest["stale_key"] = OpenReality.ShaderCacheEntry(
+                        "stale_key", "opengl", UInt64(0), UInt64(0),
+                        "opengl/stale_key.bin", time(), Int64(0)
+                    )
 
-                result = cache_lookup("stale_key")
-                @test result === nothing
-                @test !haskey(cache.manifest, "stale_key")
+                    result = cache_lookup("stale_key")
+                    @test result === nothing
+                    @test !haskey(cache.manifest, "stale_key")
 
-                cache.enabled = false
-                empty!(cache.manifest)
+                    cache.enabled = false
+                    empty!(cache.manifest)
+                end
             end
         end
 
@@ -7189,36 +7201,38 @@ using StaticArrays
         end
 
         @testset "manifest round-trip via TOML" begin
-            mktempdir() do tmpdir
-                cache = get_shader_cache()
-                cache.enabled = false
-                empty!(cache.manifest)
+            withenv("OPENREALITY_NO_SHADER_CACHE" => nothing) do
+                mktempdir() do tmpdir
+                    cache = get_shader_cache()
+                    cache.enabled = false
+                    empty!(cache.manifest)
 
-                init_shader_cache!(tmpdir)
+                    init_shader_cache!(tmpdir)
 
-                # Store two entries
-                cache_store!(shader_cache_key("s1"), UInt8[0x01, 0x02], "opengl";
-                             source_hash=UInt64(12345), driver_hash=UInt64(67890))
-                cache_store!(shader_cache_key("s2"), UInt8[0x03, 0x04], "vulkan")
-                @test length(cache.manifest) == 2
+                    # Store two entries
+                    cache_store!(shader_cache_key("s1"), UInt8[0x01, 0x02], "opengl";
+                                 source_hash=UInt64(12345), driver_hash=UInt64(67890))
+                    cache_store!(shader_cache_key("s2"), UInt8[0x03, 0x04], "vulkan")
+                    @test length(cache.manifest) == 2
 
-                # Verify manifest file was written
-                manifest_path = joinpath(tmpdir, ".openreality", "shader_cache", "cache_manifest.toml")
-                @test isfile(manifest_path)
+                    # Verify manifest file was written
+                    manifest_path = joinpath(tmpdir, ".openreality", "shader_cache", "cache_manifest.toml")
+                    @test isfile(manifest_path)
 
-                # Create a new cache and load the manifest
-                cache2 = OpenReality.ShaderCache()
-                cache2.cache_dir = joinpath(tmpdir, ".openreality", "shader_cache")
-                OpenReality._load_manifest!(cache2, manifest_path)
-                @test length(cache2.manifest) == 2
+                    # Create a new cache and load the manifest
+                    cache2 = OpenReality.ShaderCache()
+                    cache2.cache_dir = joinpath(tmpdir, ".openreality", "shader_cache")
+                    OpenReality._load_manifest!(cache2, manifest_path)
+                    @test length(cache2.manifest) == 2
 
-                k1 = shader_cache_key("s1")
-                @test haskey(cache2.manifest, k1)
-                @test cache2.manifest[k1].source_hash == UInt64(12345)
-                @test cache2.manifest[k1].driver_hash == UInt64(67890)
+                    k1 = shader_cache_key("s1")
+                    @test haskey(cache2.manifest, k1)
+                    @test cache2.manifest[k1].source_hash == UInt64(12345)
+                    @test cache2.manifest[k1].driver_hash == UInt64(67890)
 
-                cache.enabled = false
-                empty!(cache.manifest)
+                    cache.enabled = false
+                    empty!(cache.manifest)
+                end
             end
         end
 
