@@ -7,22 +7,22 @@ _BUN_PLATFORMS = {
     "1.3.8": {
         ("linux", "amd64"): {
             "url": "{base}/bun-v1.3.8/bun-linux-x64.zip",
-            "strip_prefix": "bun-linux-x64",
+            "subdir": "bun-linux-x64",
             "sha256": "0322b17f0722da76a64298aad498225aedcbf6df1008a1dee45e16ecb226a3f1",
         },
         ("linux", "aarch64"): {
             "url": "{base}/bun-v1.3.8/bun-linux-aarch64.zip",
-            "strip_prefix": "bun-linux-aarch64",
+            "subdir": "bun-linux-aarch64",
             "sha256": "4e9deb6814a7ec7f68725ddd97d0d7b4065bcda9a850f69d497567e995a7fa33",
         },
         ("mac os x", "aarch64"): {
             "url": "{base}/bun-v1.3.8/bun-darwin-aarch64.zip",
-            "strip_prefix": "bun-darwin-aarch64",
+            "subdir": "bun-darwin-aarch64",
             "sha256": "672a0a9a7b744d085a1d2219ca907e3e26f5579fca9e783a9510a4f98a36212f",
         },
         ("mac os x", "x86_64"): {
             "url": "{base}/bun-v1.3.8/bun-darwin-x64.zip",
-            "strip_prefix": "bun-darwin-x64",
+            "subdir": "bun-darwin-x64",
             "sha256": "4a0ecd703b37d66abaf51e5bc24fd1249e8dc392c17ee6235710cf51a0988b85",
         },
     },
@@ -67,30 +67,26 @@ def _bun_download_impl(repository_ctx):
         ))
 
     url = platform_info["url"].format(base = _BUN_BASE_URL)
+    subdir = platform_info["subdir"]
 
     repository_ctx.download_and_extract(
         url = url,
         sha256 = platform_info["sha256"],
     )
 
-    # Find the bun binary regardless of archive internal structure
-    result = repository_ctx.execute(["find", ".", "-name", "bun", "-type", "f"])
-    if result.return_code != 0 or not result.stdout.strip():
-        # Debug: show what was actually extracted
-        ls_result = repository_ctx.execute(["find", ".", "-maxdepth", "3"])
-        fail("Could not find bun binary after extracting {}. Contents:\n{}".format(
+    # Verify the binary exists where we expect it
+    bun_bin_path = subdir + "/bun"
+    result = repository_ctx.execute(["test", "-f", bun_bin_path])
+    if result.return_code != 0:
+        # Binary not at expected path — dump contents for debugging
+        ls_result = repository_ctx.execute(["find", ".", "-maxdepth", "3", "-type", "f"])
+        fail("Bun binary not found at '{}' after extracting {}.\nExtracted contents:\n{}".format(
+            bun_bin_path,
             url,
             ls_result.stdout,
         ))
 
-    bun_path = result.stdout.strip().split("\n")[0]
-    if bun_path != "./bun":
-        repository_ctx.execute(["mv", bun_path, "bun"])
-
-    # Clean up extracted subdirectories
-    subdir = platform_info["strip_prefix"]
-    repository_ctx.execute(["rm", "-rf", subdir])
-    repository_ctx.execute(["chmod", "+x", "bun"])
+    repository_ctx.execute(["chmod", "+x", bun_bin_path])
 
     toolchain_type = repository_ctx.attr.toolchain_type
 
@@ -123,15 +119,16 @@ bun_toolchain = rule(
 )
 """)
 
-    # Write the BUILD file that defines the toolchain
+    # Reference the binary at its original extracted path — don't mv it,
+    # so Bazel's file tracking from download_and_extract stays intact.
     repository_ctx.file("BUILD.bazel", content = """\
 load(":defs.bzl", "bun_toolchain")
 
-exports_files(["bun"])
+exports_files(["{bun_bin_path}"])
 
 bun_toolchain(
     name = "bun_toolchain_impl",
-    bun_bin = "bun",
+    bun_bin = "{bun_bin_path}",
     visibility = ["//visibility:public"],
 )
 
@@ -141,7 +138,10 @@ toolchain(
     toolchain_type = "{toolchain_type}",
     visibility = ["//visibility:public"],
 )
-""".format(toolchain_type = toolchain_type))
+""".format(
+        bun_bin_path = bun_bin_path,
+        toolchain_type = toolchain_type,
+    ))
 
 bun_download = repository_rule(
     implementation = _bun_download_impl,
