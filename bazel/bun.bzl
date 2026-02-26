@@ -49,7 +49,10 @@ def _bun_install_impl(ctx):
         ),
         mnemonic = "BunInstall",
         progress_message = "Installing Bun dependencies for %s" % ctx.label,
-        execution_requirements = {"requires-network": "1"},
+        execution_requirements = {
+            "requires-network": "1",
+            "no-sandbox": "1",
+        },
     )
     return [DefaultInfo(files = depset([node_modules]))]
 
