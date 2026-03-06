@@ -102,9 +102,16 @@ const _GLFW_JOYSTICKS = [
     GLFW.JOYSTICK_13, GLFW.JOYSTICK_14, GLFW.JOYSTICK_15, GLFW.JOYSTICK_16,
 ]
 
+# GLFW.jl doesn't wrap glfwJoystickIsGamepad, so call the C function directly.
+# Filters out non-gamepad devices (accelerometers, virtual inputs) that register
+# as joysticks on Linux and can report constant non-zero axis values.
+function _joystick_is_gamepad(joy::GLFW.Joystick)::Bool
+    return Bool(ccall((:glfwJoystickIsGamepad, GLFW.libglfw), Cint, (Cint,), joy))
+end
+
 function poll_gamepads!(input::InputState)
     for (idx, joy) in enumerate(_GLFW_JOYSTICKS)
-        if GLFW.JoystickPresent(joy)
+        if GLFW.JoystickPresent(joy) && _joystick_is_gamepad(joy)
             axes = GLFW.GetJoystickAxes(joy)
             if axes !== nothing
                 input.gamepad_axes[idx] = Float32[Float32(a) for a in axes]
