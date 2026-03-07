@@ -15,7 +15,11 @@ pub async fn scene(name: String, ctx: ProjectContext) -> anyhow::Result<()> {
     let path = dir.join(&filename);
 
     if path.exists() {
-        anyhow::bail!("File already exists: {}", path.display());
+        anyhow::bail!(
+            "Scene file already exists: {}\n  \
+             Choose a different name or delete the existing file.",
+            path.display()
+        );
     }
 
     let scene_name = name.trim_end_matches(".jl");

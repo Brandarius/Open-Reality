@@ -58,7 +58,9 @@ pub async fn spawn_julia_command(
 
                 let status = child.wait().await;
                 let exit_code = status.ok().and_then(|s| s.code());
-                let _ = tx.send(RunEvent::Finished { exit_code });
+                if tx.send(RunEvent::Finished { exit_code }).is_err() {
+                    eprintln!("Warning: event channel closed before process finished");
+                }
             }
             Err(e) => {
                 let _ = tx.send(RunEvent::Error(format!("Failed to spawn julia: {e}")));

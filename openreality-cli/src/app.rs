@@ -119,7 +119,7 @@ impl App {
         }
 
         match self.state.active_tab {
-            Tab::Dashboard => {}
+            Tab::Dashboard => self.handle_dashboard_key(key).await,
             Tab::Build => self.handle_build_key(key).await,
             Tab::Run => self.handle_run_key(key).await,
             Tab::Setup => self.handle_setup_key(key).await,
@@ -127,18 +127,98 @@ impl App {
         }
     }
 
+    async fn handle_dashboard_key(&mut self, key: crossterm::event::KeyEvent) {
+        if self.state.creating_scene {
+            match key.code {
+                KeyCode::Enter => {
+                    let name = self.state.scene_name_input.trim().to_string();
+                    self.state.creating_scene = false;
+                    self.state.scene_name_input.clear();
+                    if !name.is_empty() {
+                        let ctx = crate::project::ProjectContext {
+                            project_root: self.state.project_root.clone(),
+                            kind: self.state.project_kind.clone(),
+                            engine_path: self.state.engine_path.clone(),
+                            config: None,
+                        };
+                        match crate::commands::new::scene(name, ctx).await {
+                            Ok(()) => {
+                                self.state.examples =
+                                    detect::discover_examples(&self.state.project_root);
+                            }
+                            Err(_e) => {}
+                        }
+                    }
+                }
+                KeyCode::Esc => {
+                    self.state.creating_scene = false;
+                    self.state.scene_name_input.clear();
+                }
+                KeyCode::Backspace => {
+                    self.state.scene_name_input.pop();
+                }
+                KeyCode::Char(c) => {
+                    self.state.scene_name_input.push(c);
+                }
+                _ => {}
+            }
+            return;
+        }
+        if let KeyCode::Char('n') = key.code {
+            self.state.creating_scene = true;
+        }
+    }
+
     async fn handle_build_key(&mut self, key: crossterm::event::KeyEvent) {
         match key.code {
+            // Build mode switching
+            KeyCode::Char('a') => {
+                self.state.build_mode = BuildMode::Backend;
+            }
+            KeyCode::Char('d') => {
+                self.state.build_mode = BuildMode::Desktop;
+            }
+            KeyCode::Char('w') => {
+                self.state.build_mode = BuildMode::Web;
+            }
+            KeyCode::Char('m') => {
+                self.state.build_mode = BuildMode::Mobile;
+            }
+            KeyCode::Char('x') => {
+                self.state.build_mode = BuildMode::Export;
+            }
+            KeyCode::Char('p') => {
+                self.state.build_mode = BuildMode::Package;
+            }
             KeyCode::Up | KeyCode::Char('k') => {
-                self.state.build_selected = self.state.build_selected.saturating_sub(1);
+                if self.state.build_mode == BuildMode::Backend {
+                    self.state.build_selected = self.state.build_selected.saturating_sub(1);
+                }
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                let max = self.state.backends.len().saturating_sub(1);
-                self.state.build_selected = (self.state.build_selected + 1).min(max);
+                if self.state.build_mode == BuildMode::Backend {
+                    let max = self.state.backends.len().saturating_sub(1);
+                    self.state.build_selected = (self.state.build_selected + 1).min(max);
+                }
             }
-            KeyCode::Enter | KeyCode::Char('b') => {
-                self.start_build().await;
-            }
+            KeyCode::Enter | KeyCode::Char('b') => match self.state.build_mode {
+                BuildMode::Backend => self.start_build().await,
+                other => {
+                    self.state.build_log.clear();
+                    self.state.build_log.push(
+                        format!(
+                            "{} builds run via CLI: orcli build {}",
+                            other.label(),
+                            other.label().to_lowercase()
+                        ),
+                        false,
+                    );
+                    self.state.build_log.push(
+                            "TUI backend builds are fully supported. For other build targets, use the CLI directly.".into(),
+                            false,
+                        );
+                }
+            },
             KeyCode::Char('g') => self.state.build_log.scroll_to_top(),
             KeyCode::Char('G') => self.state.build_log.scroll_to_bottom(),
             KeyCode::PageUp => self.state.build_log.scroll_up(20),
@@ -162,6 +242,9 @@ impl App {
             KeyCode::Right | KeyCode::Char('l') => {
                 let max = self.state.runnable_backends().len().saturating_sub(1);
                 self.state.run_backend_idx = (self.state.run_backend_idx + 1).min(max);
+            }
+            KeyCode::Char('c') => {
+                self.state.warm_cache = !self.state.warm_cache;
             }
             KeyCode::Enter | KeyCode::Char('r') => {
                 self.start_example().await;
@@ -225,10 +308,9 @@ impl App {
         }
 
         self.state.build_log.clear();
-        self.state.build_log.push(
-            format!("Building {}...", backend.label()),
-            false,
-        );
+        self.state
+            .build_log
+            .push(format!("Building {}...", backend.label()), false);
         self.state.build_process = ProcessStatus::Running;
         self.state.backends[self.state.build_selected].build_status = BuildStatus::Building;
 
@@ -270,9 +352,7 @@ impl App {
                 self.state.build_process = ProcessStatus::Finished { exit_code };
 
                 if success {
-                    self.state
-                        .build_log
-                        .push("Build succeeded!".into(), false);
+                    self.state.build_log.push("Build succeeded!".into(), false);
                     let idx = self.state.build_selected;
                     let backend = self.state.backends[idx].backend;
                     self.state.backends[idx].build_status = detect::check_backend_artifact(
@@ -281,13 +361,11 @@ impl App {
                         self.state.platform,
                     );
                 } else {
-                    self.state.build_log.push(
-                        format!("Build failed (exit code: {exit_code:?})"),
-                        true,
-                    );
+                    self.state
+                        .build_log
+                        .push(format!("Build failed (exit code: {exit_code:?})"), true);
                     let idx = self.state.build_selected;
-                    self.state.backends[idx].build_status =
-                        BuildStatus::BuildFailed { exit_code };
+                    self.state.backends[idx].build_status = BuildStatus::BuildFailed { exit_code };
                 }
             }
             build::BuildEvent::Error(e) => {
@@ -312,10 +390,9 @@ impl App {
         let filename = example.filename.clone();
 
         self.state.run_log.clear();
-        self.state.run_log.push(
-            format!("Running {}...", filename),
-            false,
-        );
+        self.state
+            .run_log
+            .push(format!("Running {}...", filename), false);
         self.state.run_process = ProcessStatus::Running;
 
         let (run_tx, mut run_rx) = mpsc::unbounded_channel();
@@ -329,10 +406,7 @@ impl App {
         });
 
         let project_root = self.state.project_root.clone();
-        let args = vec![
-            "--project=.".to_string(),
-            format!("examples/{filename}"),
-        ];
+        let args = vec!["--project=.".to_string(), format!("examples/{filename}")];
         match runner::spawn_julia_command(&project_root, args, run_tx).await {
             Ok(handle) => self.run_handle = Some(handle),
             Err(e) => {
@@ -362,10 +436,9 @@ impl App {
                         .run_log
                         .push("Process finished successfully.".into(), false);
                 } else {
-                    self.state.run_log.push(
-                        format!("Process exited (code: {exit_code:?})"),
-                        true,
-                    );
+                    self.state
+                        .run_log
+                        .push(format!("Process exited (code: {exit_code:?})"), true);
                 }
             }
             runner::RunEvent::Error(e) => {
@@ -385,38 +458,103 @@ impl App {
 
         let action = SetupAction::ALL[self.state.setup_selected];
 
-        if matches!(action, SetupAction::RefreshDetection) {
-            self.state.setup_log.clear();
-            self.state
-                .setup_log
-                .push("Refreshing tool detection...".into(), false);
-            self.state.tools = detect::detect_all_tools(self.state.platform).await;
-            self.state.backends = detect::detect_all_backends(
-                &self.state.project_root,
-                &self.state.tools,
-                self.state.platform,
-            );
-            self.state.julia_packages_installed =
-                detect::check_julia_packages(&self.state.project_root);
-            self.state.examples = detect::discover_examples(&self.state.project_root);
-            self.state
-                .setup_log
-                .push("Detection complete.".into(), false);
-            return;
+        // Handle synchronous actions
+        match action {
+            SetupAction::RefreshDetection => {
+                self.state.setup_log.clear();
+                self.state
+                    .setup_log
+                    .push("Refreshing tool detection...".into(), false);
+                self.state.tools = detect::detect_all_tools(self.state.platform).await;
+                self.state.backends = detect::detect_all_backends(
+                    &self.state.project_root,
+                    &self.state.tools,
+                    self.state.platform,
+                );
+                self.state.julia_packages_installed =
+                    detect::check_julia_packages(&self.state.project_root);
+                self.state.examples = detect::discover_examples(&self.state.project_root);
+                self.state
+                    .setup_log
+                    .push("Detection complete.".into(), false);
+                return;
+            }
+            SetupAction::CacheClear => {
+                self.state.setup_log.clear();
+                let cache_dir = self
+                    .state
+                    .project_root
+                    .join(".openreality")
+                    .join("shader_cache");
+                if cache_dir.exists() {
+                    match std::fs::remove_dir_all(&cache_dir) {
+                        Ok(()) => self
+                            .state
+                            .setup_log
+                            .push("Shader cache cleared.".into(), false),
+                        Err(e) => self
+                            .state
+                            .setup_log
+                            .push(format!("Failed to clear cache: {e}"), true),
+                    }
+                } else {
+                    self.state
+                        .setup_log
+                        .push("No shader cache found.".into(), false);
+                }
+                return;
+            }
+            SetupAction::CacheStatus => {
+                self.state.setup_log.clear();
+                let cache_dir = self
+                    .state
+                    .project_root
+                    .join(".openreality")
+                    .join("shader_cache");
+                if cache_dir.exists() {
+                    let mut count = 0usize;
+                    let mut total_size = 0u64;
+                    if let Ok(entries) = std::fs::read_dir(&cache_dir) {
+                        for entry in entries.flatten() {
+                            if entry.path().is_file() {
+                                count += 1;
+                                total_size += entry.metadata().map(|m| m.len()).unwrap_or(0);
+                            }
+                        }
+                    }
+                    self.state.setup_log.push(
+                        format!(
+                            "Shader cache: {} files, {:.1} KB",
+                            count,
+                            total_size as f64 / 1024.0
+                        ),
+                        false,
+                    );
+                } else {
+                    self.state
+                        .setup_log
+                        .push("No shader cache found.".into(), false);
+                }
+                return;
+            }
+            _ => {}
         }
 
+        // Handle Julia-based actions
         let pkg_expr = match action {
             SetupAction::PkgInstantiate => "Pkg.instantiate()",
             SetupAction::PkgStatus => "Pkg.status()",
             SetupAction::PkgUpdate => "Pkg.update()",
-            SetupAction::RefreshDetection => unreachable!(),
+            SetupAction::CacheShaders => {
+                r#"using OpenReality; OpenReality._warm_shader_cache!("opengl")"#
+            }
+            _ => unreachable!(),
         };
 
         self.state.setup_log.clear();
-        self.state.setup_log.push(
-            format!("Running {}...", action.label()),
-            false,
-        );
+        self.state
+            .setup_log
+            .push(format!("Running {}...", action.label()), false);
         self.state.setup_process = ProcessStatus::Running;
 
         let (setup_tx, mut setup_rx) = mpsc::unbounded_channel();
@@ -459,10 +597,9 @@ impl App {
                         .setup_log
                         .push("Action completed successfully.".into(), false);
                 } else {
-                    self.state.setup_log.push(
-                        format!("Action failed (exit code: {exit_code:?})"),
-                        true,
-                    );
+                    self.state
+                        .setup_log
+                        .push(format!("Action failed (exit code: {exit_code:?})"), true);
                 }
             }
             runner::RunEvent::Error(e) => {
@@ -534,14 +671,11 @@ impl App {
             runner::RunEvent::Finished { exit_code } => {
                 self.state.test_process = ProcessStatus::Finished { exit_code };
                 if exit_code == Some(0) {
+                    self.state.test_log.push("All tests passed!".into(), false);
+                } else {
                     self.state
                         .test_log
-                        .push("All tests passed!".into(), false);
-                } else {
-                    self.state.test_log.push(
-                        format!("Tests failed (exit code: {exit_code:?})"),
-                        true,
-                    );
+                        .push(format!("Tests failed (exit code: {exit_code:?})"), true);
                 }
             }
             runner::RunEvent::Error(e) => {
@@ -578,7 +712,27 @@ impl App {
         disable_raw_mode()?;
         execute!(io::stdout(), LeaveAlternateScreen)?;
 
-        println!("\n--- Running {} (press Ctrl+C in the window to quit) ---\n", filename);
+        println!(
+            "\n--- Running {} (press Ctrl+C in the window to quit) ---\n",
+            filename
+        );
+
+        // Optionally warm shader cache before running
+        if self.state.warm_cache {
+            println!("Warming shader cache...");
+            let _ = tokio::process::Command::new("julia")
+                .args([
+                    "--project=.",
+                    "-e",
+                    r#"using OpenReality; OpenReality._warm_shader_cache!("opengl")"#,
+                ])
+                .current_dir(&self.state.project_root)
+                .stdin(std::process::Stdio::inherit())
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .status()
+                .await;
+        }
 
         let status = tokio::process::Command::new("julia")
             .args(["--project=.", &format!("examples/{filename}")])
@@ -590,7 +744,10 @@ impl App {
             .await;
 
         match &status {
-            Ok(s) => println!("\n--- Example exited with code: {} ---", s.code().unwrap_or(-1)),
+            Ok(s) => println!(
+                "\n--- Example exited with code: {} ---",
+                s.code().unwrap_or(-1)
+            ),
             Err(e) => println!("\n--- Failed to run example: {e} ---"),
         }
 

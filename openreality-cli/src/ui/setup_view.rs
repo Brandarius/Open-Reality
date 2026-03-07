@@ -57,10 +57,7 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect) {
     };
 
     let hints = vec![
-        Line::styled(
-            format!("Status: {process_hint}"),
-            Style::default().bold(),
-        ),
+        Line::styled(format!("Status: {process_hint}"), Style::default().bold()),
         Line::raw("[Enter] Run action"),
     ];
     let hint_box = Paragraph::new(hints).block(Block::default().borders(Borders::ALL));

@@ -26,6 +26,14 @@ pub async fn run(
         PathBuf::from(&scene)
     };
 
+    if !scene_abs.exists() {
+        anyhow::bail!(
+            "Scene file not found: {}\n  \
+             Provide a valid .jl scene file path.",
+            scene_abs.display()
+        );
+    }
+
     let output_abs = if output.is_relative() {
         ctx.project_root.join(&output)
     } else {

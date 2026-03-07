@@ -63,8 +63,16 @@ async fn show_cache_status(ctx: ProjectContext) -> anyhow::Result<()> {
     let (gl_count, gl_size) = count_and_size(&cache_dir.join("opengl"));
     let (vk_count, vk_size) = count_and_size(&cache_dir.join("vulkan"));
 
-    println!("  OpenGL:  {} cached programs ({:.2} KB)", gl_count, gl_size as f64 / 1024.0);
-    println!("  Vulkan:  {} cached SPIR-V   ({:.2} KB)", vk_count, vk_size as f64 / 1024.0);
+    println!(
+        "  OpenGL:  {} cached programs ({:.2} KB)",
+        gl_count,
+        gl_size as f64 / 1024.0
+    );
+    println!(
+        "  Vulkan:  {} cached SPIR-V   ({:.2} KB)",
+        vk_count,
+        vk_size as f64 / 1024.0
+    );
     println!(
         "  Total:   {} entries ({:.2} KB)",
         gl_count + vk_count,

@@ -21,11 +21,7 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect) {
         .iter()
         .enumerate()
         .map(|(i, ex)| {
-            let marker = if i == state.run_selected {
-                "> "
-            } else {
-                "  "
-            };
+            let marker = if i == state.run_selected { "> " } else { "  " };
             let backend_tag = match &ex.required_backend {
                 Some(Backend::Metal) => " [Metal]",
                 Some(Backend::Vulkan) => " [Vulkan]",
@@ -76,17 +72,26 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect) {
         .map(|e| e.description.as_str())
         .unwrap_or("");
 
+    let cache_label = if state.warm_cache { "ON" } else { "off" };
+    let cache_style = if state.warm_cache {
+        Style::default().fg(Color::Green).bold()
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
+
     let hints = vec![
         Line::from(vec![
             Span::raw("Backend: < "),
             Span::styled(backend_label, Style::default().fg(Color::Cyan).bold()),
             Span::raw(" >  [h/l] switch"),
         ]),
-        Line::styled(
-            format!("Status: {process_hint}"),
-            Style::default().bold(),
-        ),
-        Line::raw(format!("{desc}")),
+        Line::from(vec![
+            Span::raw("Warm cache: "),
+            Span::styled(cache_label, cache_style),
+            Span::raw("  [c] toggle"),
+        ]),
+        Line::styled(format!("Status: {process_hint}"), Style::default().bold()),
+        Line::raw(desc.to_string()),
     ];
     let hint_box = Paragraph::new(hints).block(Block::default().borders(Borders::ALL));
     frame.render_widget(hint_box, left_chunks[1]);

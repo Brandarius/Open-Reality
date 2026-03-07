@@ -1,5 +1,7 @@
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState};
+use ratatui::widgets::{
+    Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+};
 
 use crate::state::LogBuffer;
 
@@ -11,7 +13,8 @@ pub fn render(frame: &mut Frame, log: &LogBuffer, area: Rect, title: &str) {
     let start = if log.auto_scroll {
         total_lines.saturating_sub(inner_height)
     } else {
-        log.scroll_offset.min(total_lines.saturating_sub(inner_height))
+        log.scroll_offset
+            .min(total_lines.saturating_sub(inner_height))
     };
 
     let lines: Vec<Line> = log
@@ -29,8 +32,8 @@ pub fn render(frame: &mut Frame, log: &LogBuffer, area: Rect, title: &str) {
         })
         .collect();
 
-    let paragraph = Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title(title));
+    let paragraph =
+        Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(title));
 
     frame.render_widget(paragraph, area);
 

@@ -144,6 +144,7 @@ render(s)
 | Guide | Description |
 |-------|-------------|
 | [Getting Started](docs/getting-started.md) | Installation, tutorials, and your first scene |
+| [CLI Reference](docs/cli-reference.md) | Commands, options, TUI guide, and troubleshooting for `orcli` |
 | [API Reference](docs/api-reference.md) | Complete reference for all components, functions, and types |
 | [Architecture](docs/architecture.md) | Engine internals and design decisions |
 | [Examples](docs/examples.md) | Annotated code samples for common patterns |

@@ -17,7 +17,7 @@ pub fn render(frame: &mut Frame, state: &AppState) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // tab bar
-            Constraint::Min(0),   // main content
+            Constraint::Min(0),    // main content
             Constraint::Length(1), // status bar
         ])
         .split(frame.area());

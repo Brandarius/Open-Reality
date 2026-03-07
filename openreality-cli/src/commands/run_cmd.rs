@@ -14,7 +14,11 @@ pub async fn run(file: String, warm_cache: bool, ctx: ProjectContext) -> anyhow:
             .await?;
 
         if !warm_status.success() {
-            eprintln!("Warning: shader cache warming failed, continuing anyway...");
+            eprintln!(
+                "Warning: shader cache warming failed (exit code: {:?}), continuing anyway.\n  \
+                 Try running manually: julia --project=. -e 'using OpenReality; OpenReality._warm_shader_cache!(\"opengl\")'",
+                warm_status.code()
+            );
         }
     }
 

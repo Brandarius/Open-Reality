@@ -19,18 +19,13 @@ pub fn library_status_span(status: &LibraryStatus) -> Span<'static> {
         LibraryStatus::NotFound => {
             Span::styled(" MISSING ", Style::default().fg(Color::Red).bold())
         }
-        LibraryStatus::Unknown => {
-            Span::styled(" N/A ", Style::default().fg(Color::DarkGray))
-        }
+        LibraryStatus::Unknown => Span::styled(" N/A ", Style::default().fg(Color::DarkGray)),
     }
 }
 
 pub fn build_status_span(status: &BuildStatus) -> Span<'static> {
     match status {
-        BuildStatus::NotNeeded => Span::styled(
-            " READY ",
-            Style::default().fg(Color::Green),
-        ),
+        BuildStatus::NotNeeded => Span::styled(" READY ", Style::default().fg(Color::Green)),
         BuildStatus::Built { modified, .. } => {
             let text = match modified {
                 Some(m) => format!(" BUILT ({m}) "),
@@ -38,13 +33,10 @@ pub fn build_status_span(status: &BuildStatus) -> Span<'static> {
             };
             Span::styled(text, Style::default().fg(Color::Green).bold())
         }
-        BuildStatus::NotBuilt => {
-            Span::styled(" NOT BUILT ", Style::default().fg(Color::Yellow))
+        BuildStatus::NotBuilt => Span::styled(" NOT BUILT ", Style::default().fg(Color::Yellow)),
+        BuildStatus::Building => {
+            Span::styled(" BUILDING... ", Style::default().fg(Color::Yellow).bold())
         }
-        BuildStatus::Building => Span::styled(
-            " BUILDING... ",
-            Style::default().fg(Color::Yellow).bold(),
-        ),
         BuildStatus::BuildFailed { .. } => {
             Span::styled(" FAILED ", Style::default().fg(Color::Red).bold())
         }

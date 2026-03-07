@@ -303,6 +303,9 @@ pub enum SetupAction {
     PkgStatus,
     PkgUpdate,
     RefreshDetection,
+    CacheShaders,
+    CacheClear,
+    CacheStatus,
 }
 
 impl SetupAction {
@@ -311,6 +314,9 @@ impl SetupAction {
         Self::PkgStatus,
         Self::PkgUpdate,
         Self::RefreshDetection,
+        Self::CacheShaders,
+        Self::CacheClear,
+        Self::CacheStatus,
     ];
 
     pub fn label(&self) -> &'static str {
@@ -319,8 +325,45 @@ impl SetupAction {
             Self::PkgStatus => "Pkg.status()",
             Self::PkgUpdate => "Pkg.update()",
             Self::RefreshDetection => "Refresh tool detection",
+            Self::CacheShaders => "Warm shader cache",
+            Self::CacheClear => "Clear shader cache",
+            Self::CacheStatus => "Shader cache status",
         }
     }
+}
+
+// ─── Build Mode ─────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildMode {
+    Backend,
+    Desktop,
+    Web,
+    Mobile,
+    Export,
+    Package,
+}
+
+impl BuildMode {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Backend => "Backend",
+            Self::Desktop => "Desktop",
+            Self::Web => "Web",
+            Self::Mobile => "Mobile",
+            Self::Export => "Export",
+            Self::Package => "Package",
+        }
+    }
+
+    pub const ALL: &'static [BuildMode] = &[
+        Self::Backend,
+        Self::Desktop,
+        Self::Web,
+        Self::Mobile,
+        Self::Export,
+        Self::Package,
+    ];
 }
 
 // ─── Application State ──────────────────────────────────────────────
@@ -341,6 +384,7 @@ pub struct AppState {
     pub backends: Vec<BackendState>,
 
     // Build tab
+    pub build_mode: BuildMode,
     pub build_selected: usize,
     pub build_log: LogBuffer,
     pub build_process: ProcessStatus,
@@ -351,6 +395,7 @@ pub struct AppState {
     pub run_backend_idx: usize,
     pub run_log: LogBuffer,
     pub run_process: ProcessStatus,
+    pub warm_cache: bool,
 
     // Setup tab
     pub setup_selected: usize,
@@ -360,6 +405,10 @@ pub struct AppState {
     // Tests tab
     pub test_log: LogBuffer,
     pub test_process: ProcessStatus,
+
+    // Dashboard
+    pub creating_scene: bool,
+    pub scene_name_input: String,
 
     // Global
     pub show_help: bool,
@@ -391,6 +440,7 @@ impl AppState {
             tools: ToolSet::default(),
             julia_packages_installed: None,
             backends,
+            build_mode: BuildMode::Backend,
             build_selected: 0,
             build_log: LogBuffer::new(5000),
             build_process: ProcessStatus::Idle,
@@ -399,11 +449,14 @@ impl AppState {
             run_backend_idx: 0,
             run_log: LogBuffer::new(5000),
             run_process: ProcessStatus::Idle,
+            warm_cache: false,
             setup_selected: 0,
             setup_log: LogBuffer::new(5000),
             setup_process: ProcessStatus::Idle,
             test_log: LogBuffer::new(10000),
             test_process: ProcessStatus::Idle,
+            creating_scene: false,
+            scene_name_input: String::new(),
             show_help: false,
             should_quit: false,
         }
@@ -590,7 +643,7 @@ mod tests {
 
     #[test]
     fn test_setup_action_all_count() {
-        assert_eq!(SetupAction::ALL.len(), 4);
+        assert_eq!(SetupAction::ALL.len(), 7);
     }
 
     #[test]

@@ -92,7 +92,9 @@ pub async fn spawn_build(
 
                 let status = child.wait().await;
                 let exit_code = status.ok().and_then(|s| s.code());
-                let _ = tx.send(BuildEvent::Finished { exit_code });
+                if tx.send(BuildEvent::Finished { exit_code }).is_err() {
+                    eprintln!("Warning: event channel closed before build finished");
+                }
             }
             Err(e) => {
                 let _ = tx.send(BuildEvent::Error(format!("Failed to spawn {program}: {e}")));

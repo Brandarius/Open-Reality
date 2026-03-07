@@ -10,10 +10,7 @@ async fn detect_tool(program: &str, version_args: &[&str]) -> ToolStatus {
         Err(_) => return ToolStatus::NotFound,
     };
 
-    let output = Command::new(program)
-        .args(version_args)
-        .output()
-        .await;
+    let output = Command::new(program).args(version_args).output().await;
 
     match output {
         Ok(out) => {
@@ -22,12 +19,7 @@ async fn detect_tool(program: &str, version_args: &[&str]) -> ToolStatus {
             } else {
                 String::from_utf8_lossy(&out.stdout).to_string()
             };
-            let version = raw
-                .lines()
-                .next()
-                .unwrap_or("unknown")
-                .trim()
-                .to_string();
+            let version = raw.lines().next().unwrap_or("unknown").trim().to_string();
             ToolStatus::Found { version, path }
         }
         Err(_) => ToolStatus::Found {
@@ -71,10 +63,7 @@ async fn detect_library_glfw(platform: Platform) -> LibraryStatus {
                 Ok(out) if out.status.success() => LibraryStatus::Found,
                 _ => {
                     // Fallback: check ldconfig
-                    let output = Command::new("ldconfig")
-                        .args(["-p"])
-                        .output()
-                        .await;
+                    let output = Command::new("ldconfig").args(["-p"]).output().await;
                     match output {
                         Ok(out) => {
                             let text = String::from_utf8_lossy(&out.stdout);
@@ -152,7 +141,7 @@ pub fn check_backend_artifact(
                 if let Ok(entries) = std::fs::read_dir(&pkg_dir) {
                     let has_wasm = entries
                         .flatten()
-                        .any(|e| e.path().extension().map_or(false, |ext| ext == "wasm"));
+                        .any(|e| e.path().extension().is_some_and(|ext| ext == "wasm"));
                     if has_wasm {
                         return BuildStatus::Built {
                             artifact_path: pkg_dir,
@@ -196,12 +185,11 @@ pub fn check_julia_packages(project_root: &Path) -> Option<bool> {
 pub fn check_deps_for_backend(backend: Backend, tools: &ToolSet, platform: Platform) -> bool {
     match backend {
         Backend::OpenGL => {
-            tools.julia.is_available() && matches!(tools.glfw, LibraryStatus::Found | LibraryStatus::Unknown)
+            tools.julia.is_available()
+                && matches!(tools.glfw, LibraryStatus::Found | LibraryStatus::Unknown)
         }
         Backend::Metal => {
-            platform.supports_metal()
-                && tools.julia.is_available()
-                && tools.swift.is_available()
+            platform.supports_metal() && tools.julia.is_available() && tools.swift.is_available()
         }
         Backend::Vulkan => {
             platform.supports_vulkan()
@@ -226,7 +214,7 @@ pub fn discover_examples(project_root: &Path) -> Vec<ExampleEntry> {
         let mut files: Vec<_> = dir
             .flatten()
             .filter(|e| {
-                e.path().extension().map_or(false, |ext| ext == "jl")
+                e.path().extension().is_some_and(|ext| ext == "jl")
                     && !e.file_name().to_string_lossy().starts_with('_')
             })
             .collect();
@@ -266,7 +254,11 @@ pub fn discover_examples(project_root: &Path) -> Vec<ExampleEntry> {
     entries
 }
 
-pub fn detect_all_backends(project_root: &Path, tools: &ToolSet, platform: Platform) -> Vec<BackendState> {
+pub fn detect_all_backends(
+    project_root: &Path,
+    tools: &ToolSet,
+    platform: Platform,
+) -> Vec<BackendState> {
     Backend::available_on(platform)
         .into_iter()
         .map(|b| {
@@ -383,45 +375,73 @@ mod tests {
     #[test]
     fn test_deps_opengl_with_tools() {
         let tools = mock_toolset_all_found();
-        assert!(check_deps_for_backend(Backend::OpenGL, &tools, Platform::Linux));
+        assert!(check_deps_for_backend(
+            Backend::OpenGL,
+            &tools,
+            Platform::Linux
+        ));
     }
 
     #[test]
     fn test_deps_opengl_no_julia() {
         let mut tools = mock_toolset_all_found();
         tools.julia = ToolStatus::NotFound;
-        assert!(!check_deps_for_backend(Backend::OpenGL, &tools, Platform::Linux));
+        assert!(!check_deps_for_backend(
+            Backend::OpenGL,
+            &tools,
+            Platform::Linux
+        ));
     }
 
     #[test]
     fn test_deps_metal_on_linux() {
         let tools = mock_toolset_all_found();
-        assert!(!check_deps_for_backend(Backend::Metal, &tools, Platform::Linux));
+        assert!(!check_deps_for_backend(
+            Backend::Metal,
+            &tools,
+            Platform::Linux
+        ));
     }
 
     #[test]
     fn test_deps_metal_on_macos() {
         let tools = mock_toolset_all_found();
-        assert!(check_deps_for_backend(Backend::Metal, &tools, Platform::MacOS));
+        assert!(check_deps_for_backend(
+            Backend::Metal,
+            &tools,
+            Platform::MacOS
+        ));
     }
 
     #[test]
     fn test_deps_webgpu() {
         let tools = mock_toolset_all_found();
-        assert!(check_deps_for_backend(Backend::WebGPU, &tools, Platform::Linux));
+        assert!(check_deps_for_backend(
+            Backend::WebGPU,
+            &tools,
+            Platform::Linux
+        ));
     }
 
     #[test]
     fn test_deps_wasm() {
         let tools = mock_toolset_all_found();
-        assert!(check_deps_for_backend(Backend::WasmExport, &tools, Platform::Linux));
+        assert!(check_deps_for_backend(
+            Backend::WasmExport,
+            &tools,
+            Platform::Linux
+        ));
     }
 
     #[test]
     fn test_deps_wasm_no_wasm_pack() {
         let mut tools = mock_toolset_all_found();
         tools.wasm_pack = ToolStatus::NotFound;
-        assert!(!check_deps_for_backend(Backend::WasmExport, &tools, Platform::Linux));
+        assert!(!check_deps_for_backend(
+            Backend::WasmExport,
+            &tools,
+            Platform::Linux
+        ));
     }
 
     // ── discover_examples ──
@@ -462,7 +482,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let examples_dir = dir.path().join("examples");
         std::fs::create_dir(&examples_dir).unwrap();
-        std::fs::write(examples_dir.join("metal.jl"), "render(scene, MetalBackend())").unwrap();
+        std::fs::write(
+            examples_dir.join("metal.jl"),
+            "render(scene, MetalBackend())",
+        )
+        .unwrap();
         let examples = discover_examples(dir.path());
         assert_eq!(examples[0].required_backend, Some(Backend::Metal));
     }

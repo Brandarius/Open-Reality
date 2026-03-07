@@ -10,9 +10,7 @@ pub async fn run(target: PackageTarget, ctx: ProjectContext) -> anyhow::Result<(
             output,
             platform,
         } => package_desktop(build_dir, output, platform, ctx).await,
-        PackageTarget::Web { build_dir, output } => {
-            package_web(build_dir, output, ctx).await
-        }
+        PackageTarget::Web { build_dir, output } => package_web(build_dir, output, ctx).await,
     }
 }
 
@@ -45,10 +43,7 @@ async fn package_desktop(
 
     std::fs::create_dir_all(&output_abs)?;
 
-    println!(
-        "Packaging desktop build for {}...",
-        platform.label()
-    );
+    println!("Packaging desktop build for {}...", platform.label());
 
     let script_name = match platform {
         DesktopPlatform::Linux => "package_linux.sh",
@@ -58,12 +53,27 @@ async fn package_desktop(
 
     let package_script = ctx.engine_path.join("build").join(script_name);
     if package_script.exists() {
+        let script_str = package_script.to_str().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Package script path contains invalid UTF-8: {}",
+                package_script.display()
+            )
+        })?;
+        let build_str = build_abs.to_str().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Build directory path contains invalid UTF-8: {}",
+                build_abs.display()
+            )
+        })?;
+        let output_str = output_abs.to_str().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Output directory path contains invalid UTF-8: {}",
+                output_abs.display()
+            )
+        })?;
+
         let status = tokio::process::Command::new("bash")
-            .args([
-                package_script.to_str().unwrap(),
-                build_abs.to_str().unwrap(),
-                output_abs.to_str().unwrap(),
-            ])
+            .args([script_str, build_str, output_str])
             .current_dir(&ctx.project_root)
             .stdin(std::process::Stdio::inherit())
             .stdout(std::process::Stdio::inherit())
@@ -72,36 +82,63 @@ async fn package_desktop(
             .await?;
 
         if !status.success() {
-            anyhow::bail!("Packaging failed");
+            anyhow::bail!(
+                "Packaging failed (exit code: {:?}).\n  \
+                 Check the output of the packaging script: {}",
+                status.code(),
+                package_script.display()
+            );
         }
     } else {
         // Fallback: simple copy + tar
-        println!(
-            "No packaging script found at {}",
-            package_script.display()
-        );
+        println!("No packaging script found at {}", package_script.display());
         println!("Falling back to simple archive...");
 
         let archive_name = format!("openreality-{}.tar.gz", platform.label());
         let archive_path = output_abs.join(&archive_name);
 
+        let archive_str = archive_path.to_str().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Archive path contains invalid UTF-8: {}",
+                archive_path.display()
+            )
+        })?;
+        let parent_dir = build_abs.parent().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Cannot determine parent directory of: {}",
+                build_abs.display()
+            )
+        })?;
+        let parent_str = parent_dir.to_str().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Parent directory path contains invalid UTF-8: {}",
+                parent_dir.display()
+            )
+        })?;
+        let dir_name = build_abs.file_name().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Cannot determine directory name of: {}",
+                build_abs.display()
+            )
+        })?;
+        let dir_name_str = dir_name.to_str().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Directory name contains invalid UTF-8: {}",
+                build_abs.display()
+            )
+        })?;
+
         let status = tokio::process::Command::new("tar")
-            .args([
-                "-czf",
-                archive_path.to_str().unwrap(),
-                "-C",
-                build_abs.parent().unwrap().to_str().unwrap(),
-                build_abs
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap(),
-            ])
+            .args(["-czf", archive_str, "-C", parent_str, dir_name_str])
             .status()
             .await?;
 
         if !status.success() {
-            anyhow::bail!("tar archive creation failed");
+            anyhow::bail!(
+                "tar archive creation failed (exit code: {:?}).\n  \
+                 Ensure tar is installed and the build directory is accessible.",
+                status.code()
+            );
         }
 
         println!("Package created: {}", archive_path.display());

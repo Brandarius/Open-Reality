@@ -3,6 +3,7 @@ const route = useRoute()
 
 const sections = [
   { label: 'Getting Started', to: '/docs' },
+  { label: 'CLI Reference', to: '/docs/cli' },
   { label: 'Architecture', to: '/docs/architecture' },
   { label: 'Components', to: '/docs/components' },
   { label: 'Systems', to: '/docs/systems' },

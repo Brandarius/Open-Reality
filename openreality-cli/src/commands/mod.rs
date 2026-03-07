@@ -1,8 +1,11 @@
 pub mod build_cmd;
 pub mod cache_cmd;
 pub mod export;
+pub mod info;
 pub mod init;
 pub mod new;
 pub mod package;
 pub mod run_cmd;
+pub mod setup;
 pub mod test_cmd;
+pub mod update;

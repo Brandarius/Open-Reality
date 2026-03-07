@@ -28,13 +28,25 @@ async fn run_engine_dev(name: &str, repo_url: &str) -> anyhow::Result<()> {
         .await?;
 
     if !status.success() {
-        anyhow::bail!("git clone failed (exit code: {:?})", status.code());
+        anyhow::bail!(
+            "git clone failed (exit code: {:?}).\n  \
+             Common causes:\n  \
+             - No network connection\n  \
+             - Repository URL is incorrect: {}\n  \
+             - Git is not installed or not in PATH\n  \
+             - Insufficient permissions to create directory",
+            status.code(),
+            repo_url
+        );
     }
 
     println!("Installing Julia dependencies...");
     run_julia_setup(Path::new(name), None).await;
 
-    println!("\nEngine dev project ready! cd into '{}' and run `orcli`.", name);
+    println!(
+        "\nEngine dev project ready! cd into '{}' and run `orcli`.",
+        name
+    );
     Ok(())
 }
 
@@ -58,7 +70,16 @@ async fn run_user_project(name: &str, repo_url: &str) -> anyhow::Result<()> {
         .await?;
 
     if !status.success() {
-        anyhow::bail!("git clone failed (exit code: {:?})", status.code());
+        anyhow::bail!(
+            "git clone failed (exit code: {:?}).\n  \
+             Common causes:\n  \
+             - No network connection\n  \
+             - Repository URL is incorrect: {}\n  \
+             - Git is not installed or not in PATH\n  \
+             - Insufficient permissions to create directory",
+            status.code(),
+            repo_url
+        );
     }
 
     // Write .openreality/config.toml
@@ -133,14 +154,25 @@ async fn run_julia_setup(project_dir: &Path, extra_expr: Option<&str>) {
         }
         Ok(status) => {
             eprintln!(
-                "Warning: Julia setup exited with code {:?}. You may need to run manually:",
-                status.code()
+                "Warning: Julia setup exited with code {:?}.\n  \
+                 This may indicate missing packages or a Julia configuration issue.\n  \
+                 Run manually to see detailed errors:\n    \
+                 cd {} && julia --project=. -e '{}'",
+                status.code(),
+                project_dir.display(),
+                expr
             );
-            eprintln!("  cd {} && julia --project=. -e '{}'", project_dir.display(), expr);
         }
         Err(e) => {
-            eprintln!("Warning: Julia not found ({}). Install Julia and run:", e);
-            eprintln!("  cd {} && julia --project=. -e '{}'", project_dir.display(), expr);
+            eprintln!(
+                "Warning: Julia not found ({}).\n  \
+                 Install Julia from https://julialang.org/downloads/ and ensure it's in PATH.\n  \
+                 Then run:\n    \
+                 cd {} && julia --project=. -e '{}'",
+                e,
+                project_dir.display(),
+                expr
+            );
         }
     }
 }

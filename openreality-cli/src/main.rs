@@ -3,7 +3,9 @@ use std::io;
 use anyhow::Result;
 use clap::Parser;
 use crossterm::execute;
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use tokio::sync::mpsc;
@@ -73,6 +75,18 @@ async fn main() -> Result<()> {
         Some(cli::Command::Cache { action }) => {
             let ctx = project::detect_project_context()?;
             commands::cache_cmd::run(action, ctx).await
+        }
+        Some(cli::Command::Update) => {
+            let ctx = project::detect_project_context()?;
+            commands::update::run(ctx).await
+        }
+        Some(cli::Command::Setup { action }) => {
+            let ctx = project::detect_project_context()?;
+            commands::setup::run(action, ctx).await
+        }
+        Some(cli::Command::Info) => {
+            let ctx = project::detect_project_context()?;
+            commands::info::run(ctx).await
         }
     }
 }

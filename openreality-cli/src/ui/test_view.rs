@@ -36,10 +36,7 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect) {
     };
 
     let info = vec![
-        Line::styled(
-            "Julia Test Suite",
-            Style::default().bold().fg(Color::Cyan),
-        ),
+        Line::styled("Julia Test Suite", Style::default().bold().fg(Color::Cyan)),
         Line::raw(""),
         Line::from(vec![
             Span::raw("Status: "),
@@ -47,10 +44,7 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect) {
         ]),
         Line::raw(""),
         Line::raw("Runs:"),
-        Line::styled(
-            "  julia --project=.",
-            Style::default().fg(Color::DarkGray),
-        ),
+        Line::styled("  julia --project=.", Style::default().fg(Color::DarkGray)),
         Line::styled(
             "  -e 'using Pkg; Pkg.test()'",
             Style::default().fg(Color::DarkGray),

@@ -18,14 +18,9 @@ pub enum AppEvent {
 pub fn spawn_event_reader(tx: mpsc::UnboundedSender<AppEvent>) {
     std::thread::spawn(move || loop {
         if event::poll(Duration::from_millis(100)).unwrap_or(false) {
-            if let Ok(ev) = event::read() {
-                match ev {
-                    CEvent::Key(key) => {
-                        if tx.send(AppEvent::Key(key)).is_err() {
-                            return;
-                        }
-                    }
-                    _ => {}
+            if let Ok(CEvent::Key(key)) = event::read() {
+                if tx.send(AppEvent::Key(key)).is_err() {
+                    return;
                 }
             }
         } else if tx.send(AppEvent::Tick).is_err() {

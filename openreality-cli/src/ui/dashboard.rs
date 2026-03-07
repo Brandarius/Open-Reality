@@ -49,7 +49,7 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect) {
         Some(false) => "Not installed (run Pkg.instantiate())",
         None => "Unknown (no Project.toml found)",
     };
-    let info_text = vec![
+    let mut info_text = vec![
         Line::from(vec![
             Span::styled("Project: ", Style::default().bold()),
             Span::raw("OpenReality"),
@@ -63,17 +63,29 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect) {
             Span::raw(format!("{} found", state.examples.len())),
         ]),
         Line::raw(""),
-        Line::styled(
-            "Use the Build tab (2) to build backends",
-            Style::default().fg(Color::DarkGray),
-        ),
-        Line::styled(
-            "Use the Run tab (3) to run examples",
-            Style::default().fg(Color::DarkGray),
-        ),
     ];
-    let info = Paragraph::new(info_text)
-        .block(Block::default().borders(Borders::ALL).title(" Project "));
+
+    if state.creating_scene {
+        info_text.push(Line::from(vec![
+            Span::styled(
+                "New scene name: ",
+                Style::default().bold().fg(Color::Yellow),
+            ),
+            Span::styled(&state.scene_name_input, Style::default().fg(Color::White)),
+            Span::styled("_", Style::default().fg(Color::Yellow)),
+        ]));
+        info_text.push(Line::styled(
+            "Enter to create, Esc to cancel",
+            Style::default().fg(Color::DarkGray),
+        ));
+    } else {
+        info_text.push(Line::styled(
+            "[n] New scene  [2] Build  [3] Run",
+            Style::default().fg(Color::DarkGray),
+        ));
+    }
+    let info =
+        Paragraph::new(info_text).block(Block::default().borders(Borders::ALL).title(" Project "));
     frame.render_widget(info, left_chunks[1]);
 
     // Right column: tool detection
@@ -106,14 +118,9 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect) {
         ]),
     ];
 
-    let tools_table = Table::new(
-        tool_rows,
-        [Constraint::Length(12), Constraint::Min(20)],
-    )
-    .block(Block::default().borders(Borders::ALL).title(" Tools "))
-    .header(
-        Row::new(["Tool", "Status"]).style(Style::default().bold().fg(Color::Cyan)),
-    );
+    let tools_table = Table::new(tool_rows, [Constraint::Length(12), Constraint::Min(20)])
+        .block(Block::default().borders(Borders::ALL).title(" Tools "))
+        .header(Row::new(["Tool", "Status"]).style(Style::default().bold().fg(Color::Cyan)));
     frame.render_widget(tools_table, right_chunks[0]);
 
     // System libraries
@@ -128,17 +135,12 @@ pub fn render(frame: &mut Frame, state: &AppState, area: Rect) {
         ]),
     ];
 
-    let libs_table = Table::new(
-        lib_rows,
-        [Constraint::Length(12), Constraint::Min(20)],
-    )
-    .block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(" System Libraries "),
-    )
-    .header(
-        Row::new(["Library", "Status"]).style(Style::default().bold().fg(Color::Cyan)),
-    );
+    let libs_table = Table::new(lib_rows, [Constraint::Length(12), Constraint::Min(20)])
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" System Libraries "),
+        )
+        .header(Row::new(["Library", "Status"]).style(Style::default().bold().fg(Color::Cyan)));
     frame.render_widget(libs_table, right_chunks[1]);
 }

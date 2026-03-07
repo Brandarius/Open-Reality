@@ -77,6 +77,25 @@ pub enum Command {
         #[command(subcommand)]
         action: CacheAction,
     },
+    /// Pull latest engine changes and update dependencies
+    Update,
+    /// Manage Julia package environment
+    Setup {
+        #[command(subcommand)]
+        action: CliSetupAction,
+    },
+    /// Show project info, tool detection, and backend status
+    Info,
+}
+
+#[derive(Subcommand)]
+pub enum CliSetupAction {
+    /// Install/resolve Julia dependencies (Pkg.instantiate)
+    Install,
+    /// Show Julia package status (Pkg.status)
+    Status,
+    /// Update Julia packages (Pkg.update)
+    Update,
 }
 
 #[derive(Subcommand)]
@@ -237,7 +256,9 @@ mod tests {
     fn test_cli_init() {
         let cli = Cli::try_parse_from(["orcli", "init", "myproject"]).unwrap();
         match cli.command.unwrap() {
-            Command::Init { name, engine_dev, .. } => {
+            Command::Init {
+                name, engine_dev, ..
+            } => {
                 assert_eq!(name, "myproject");
                 assert!(!engine_dev);
             }
@@ -270,7 +291,9 @@ mod tests {
     fn test_cli_build_backend() {
         let cli = Cli::try_parse_from(["orcli", "build", "backend", "metal"]).unwrap();
         match cli.command.unwrap() {
-            Command::Build { target: BuildTarget::Backend { name } } => {
+            Command::Build {
+                target: BuildTarget::Backend { name },
+            } => {
                 assert_eq!(name, "metal");
             }
             _ => panic!("Expected Build Backend command"),
@@ -279,9 +302,7 @@ mod tests {
 
     #[test]
     fn test_cli_export() {
-        let cli = Cli::try_parse_from([
-            "orcli", "export", "scene.jl", "-o", "out.orsb",
-        ]).unwrap();
+        let cli = Cli::try_parse_from(["orcli", "export", "scene.jl", "-o", "out.orsb"]).unwrap();
         match cli.command.unwrap() {
             Command::Export { scene, output, .. } => {
                 assert_eq!(scene, "scene.jl");
@@ -300,5 +321,50 @@ mod tests {
     #[test]
     fn test_cli_invalid_subcommand() {
         assert!(Cli::try_parse_from(["orcli", "invalid"]).is_err());
+    }
+
+    #[test]
+    fn test_cli_update() {
+        let cli = Cli::try_parse_from(["orcli", "update"]).unwrap();
+        assert!(matches!(cli.command.unwrap(), Command::Update));
+    }
+
+    #[test]
+    fn test_cli_setup_install() {
+        let cli = Cli::try_parse_from(["orcli", "setup", "install"]).unwrap();
+        match cli.command.unwrap() {
+            Command::Setup {
+                action: CliSetupAction::Install,
+            } => {}
+            _ => panic!("Expected Setup Install command"),
+        }
+    }
+
+    #[test]
+    fn test_cli_setup_status() {
+        let cli = Cli::try_parse_from(["orcli", "setup", "status"]).unwrap();
+        match cli.command.unwrap() {
+            Command::Setup {
+                action: CliSetupAction::Status,
+            } => {}
+            _ => panic!("Expected Setup Status command"),
+        }
+    }
+
+    #[test]
+    fn test_cli_setup_update() {
+        let cli = Cli::try_parse_from(["orcli", "setup", "update"]).unwrap();
+        match cli.command.unwrap() {
+            Command::Setup {
+                action: CliSetupAction::Update,
+            } => {}
+            _ => panic!("Expected Setup Update command"),
+        }
+    }
+
+    #[test]
+    fn test_cli_info() {
+        let cli = Cli::try_parse_from(["orcli", "info"]).unwrap();
+        assert!(matches!(cli.command.unwrap(), Command::Info));
     }
 }

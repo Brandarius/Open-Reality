@@ -36,6 +36,14 @@ async fn build_backend(backend_str: String, ctx: ProjectContext) -> anyhow::Resu
         return Ok(());
     }
 
+    if !ctx.engine_path.exists() {
+        anyhow::bail!(
+            "Engine path does not exist: {}\n  \
+             Check that .openreality/config.toml has a correct engine_path.",
+            ctx.engine_path.display()
+        );
+    }
+
     let (program, args, cwd) = match backend {
         Backend::Metal => (
             "swift",
@@ -55,11 +63,7 @@ async fn build_backend(backend_str: String, ctx: ProjectContext) -> anyhow::Resu
         _ => unreachable!(),
     };
 
-    println!(
-        "Building {} in {}...",
-        backend.label(),
-        cwd.display()
-    );
+    println!("Building {} in {}...", backend.label(), cwd.display());
 
     let status = tokio::process::Command::new(program)
         .args(&args)
@@ -84,10 +88,7 @@ async fn build_desktop(
 ) -> anyhow::Result<()> {
     let platform = platform.unwrap_or_else(DesktopPlatform::detect);
 
-    println!(
-        "Building desktop executable for {}...",
-        platform.label()
-    );
+    println!("Building desktop executable for {}...", platform.label());
     println!("  Entry point: {}", entry);
     println!("  Output: {}", output.display());
 
@@ -193,17 +194,21 @@ end"#,
         .await?;
 
     if !status.success() {
-        anyhow::bail!("ORSB export failed");
+        anyhow::bail!(
+            "ORSB export failed (exit code: {:?}).\n  \
+             Check that your scene file defines a `scene::Scene` or `fsm::GameStateMachine` variable.\n  \
+             Run the scene manually to see detailed errors:\n    \
+             julia --project=. -e 'using OpenReality; include(\"{}\")'",
+            status.code(),
+            scene_abs.display()
+        );
     }
 
     // Step 2: Build WASM runtime
     println!("Step 2/3: Building WASM runtime...");
     let wasm_dir = ctx.engine_path.join("openreality-web");
     if !wasm_dir.exists() {
-        anyhow::bail!(
-            "WASM project not found at {}",
-            wasm_dir.display()
-        );
+        anyhow::bail!("WASM project not found at {}", wasm_dir.display());
     }
 
     let mut wasm_args = vec!["build", "--target", "web"];
@@ -221,7 +226,14 @@ end"#,
         .await?;
 
     if !status.success() {
-        anyhow::bail!("WASM build failed");
+        anyhow::bail!(
+            "WASM build failed (exit code: {:?}).\n  \
+             Ensure wasm-pack is installed: cargo install wasm-pack\n  \
+             Check that openreality-web/ compiles:\n    \
+             cd {} && wasm-pack build --target web",
+            status.code(),
+            wasm_dir.display()
+        );
     }
 
     // Step 3: Copy WASM artifacts + generate index.html
@@ -229,17 +241,27 @@ end"#,
     let pkg_dir = wasm_dir.join("pkg");
     copy_dir_contents(&pkg_dir, &output_abs)?;
 
-    let template_path = ctx.engine_path.join("build").join("web_template").join("index.html");
+    let template_path = ctx
+        .engine_path
+        .join("build")
+        .join("web_template")
+        .join("index.html");
     if template_path.exists() {
         std::fs::copy(&template_path, output_abs.join("index.html"))?;
     } else {
-        // Generate a minimal index.html
+        eprintln!(
+            "Note: No custom HTML template found at {}. Using built-in template.",
+            template_path.display()
+        );
         let html = generate_web_index_html();
         std::fs::write(output_abs.join("index.html"), html)?;
     }
 
     println!("Web build complete: {}", output_abs.display());
-    println!("Serve with: cd {} && python3 -m http.server", output_abs.display());
+    println!(
+        "Serve with: cd {} && python3 -m http.server",
+        output_abs.display()
+    );
 
     Ok(())
 }
@@ -252,10 +274,7 @@ async fn build_mobile(
     output: PathBuf,
     ctx: ProjectContext,
 ) -> anyhow::Result<()> {
-    println!(
-        "Building for mobile ({})...",
-        platform.label()
-    );
+    println!("Building for mobile ({})...", platform.label());
     println!("  Scene: {}", scene);
     println!("  Output: {}", output.display());
 
@@ -286,7 +305,10 @@ async fn build_mobile(
                 }
             }
         }
-        println!("Capacitor template files copied to {}", output_abs.display());
+        println!(
+            "Capacitor template files copied to {}",
+            output_abs.display()
+        );
     }
 
     println!("\nMobile build ready at: {}", output_abs.display());
