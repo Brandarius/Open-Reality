@@ -120,6 +120,13 @@ include("game/items.jl")
 include("game/quests.jl")
 include("game/dialogue.jl")
 include("game/debug_console.jl")
+include("game/hot_reload.jl")
+
+# Navigation system (after ECS + transforms — uses TransformComponent, Vec3f)
+include("navigation/types.jl")
+include("navigation/navmesh.jl")
+include("navigation/astar.jl")
+include("navigation/agent.jl")
 
 # Gameplay systems (after game modules — these use emit!, despawn!, get_item_def)
 include("systems/health.jl")
@@ -127,11 +134,15 @@ include("systems/inventory.jl")
 
 # Debug utilities (ENV-gated, zero overhead when OPENREALITY_DEBUG = false)
 include("debug/debug_draw.jl")
+include("debug/profiler.jl")
 
 # UI system (after components and ECS — uses types)
 include("ui/types.jl")
 include("ui/font.jl")
 include("ui/widgets.jl")
+
+# Stats overlay (after UI — uses UIContext, ui_text, ui_rect)
+include("debug/stats_overlay.jl")
 
 # GPU Abstraction Layer (abstract types that concrete backends implement)
 include("backend/gpu_types.jl")
@@ -349,6 +360,8 @@ const COMPONENT_TYPES = DataType[
     PickupComponent,
     # Behavior Tree
     BehaviorTreeComponent,
+    # Navigation
+    NavAgentComponent,
 ]
 
 # Initialize the global Ark world with all components
@@ -770,8 +783,30 @@ export watch!, unwatch!
 export update_debug_console!, render_debug_console!
 export reset_debug_console!
 
+# Export Navigation
+export NavMesh, NavMeshPolygon, NavPath, NavAgentComponent
+export build_navmesh, build_navmesh_from_grid
+export find_containing_polygon, find_path
+export nav_request_path!, nav_stop!, nav_has_path, nav_has_arrived
+export update_nav_agents!
+export register_navmesh!, get_navmesh, reset_navmesh_registry!
+export bt_nav_move_to
+
+# Export Hot-Reload
+export HotReloadManager, get_hot_reload_manager, reset_hot_reload_manager!
+export hot_reload_enable!, hot_reload_enabled
+export watch_file!, unwatch_file!, check_hot_reload!
+export load_script_file, watched_files
+
 # Export DebugDraw
 export OPENREALITY_DEBUG, debug_line!, debug_box!, debug_sphere!, flush_debug_draw!
+
+# Export Profiler
+export Profiler, ProfileScope, FrameProfile
+export get_profiler, profiler_enable!, profiler_enabled
+export profiler_begin_frame!, profiler_scope!, profiler_end_frame!
+export profiler_get_latest, profiler_get_average, profiler_fps
+export reset_profiler!, render_stats_overlay!
 
 # Visual regression testing
 include("testing/image_diff.jl")

@@ -244,32 +244,45 @@ function run_render_loop!(initial_scene::Scene;
             # Camera controllers step
             update_camera_controllers!(backend_get_input(backend), dt)
 
+            profiler_begin_frame!()
+
             # Animation step
-            update_animations!(dt)
-            update_blend_tree!(dt)
+            profiler_scope!("Animation") do
+                update_animations!(dt)
+                update_blend_tree!(dt)
+            end
 
             # Skinning step (compute bone matrices after animation)
             update_skinned_meshes!()
 
             # Physics step (collision detection, gravity, resolution)
-            update_physics!(dt)
+            profiler_scope!("Physics") do
+                update_physics!(dt)
+            end
 
             # Script step (per-entity script callbacks)
-            update_scripts!(dt, ctx)
+            profiler_scope!("Scripts") do
+                update_scripts!(dt, ctx)
+            end
 
             # Gameplay systems step
-            update_timers!(dt)
-            update_coroutines!(dt)
-            update_tweens!(dt)
-            update_behavior_trees!(dt)
-            update_health_system!(ctx)
-            update_pickups!(dt, ctx)
+            profiler_scope!("Gameplay") do
+                update_timers!(dt)
+                update_coroutines!(dt)
+                update_tweens!(dt)
+                update_behavior_trees!(dt)
+                update_nav_agents!(dt)
+                update_health_system!(ctx)
+                update_pickups!(dt, ctx)
+            end
 
             # Audio step (sync listener/source positions with transforms)
             update_audio!(dt)
 
             # Particle step (emission, simulation, billboard generation)
-            update_particles!(dt)
+            profiler_scope!("Particles") do
+                update_particles!(dt)
+            end
 
             # Terrain step (initialize new terrains, update chunk LODs)
             _cam_id = find_active_camera()
@@ -286,8 +299,9 @@ function run_render_loop!(initial_scene::Scene;
             update_dialogue_input!(backend_get_input(backend))
             update_debug_console!(backend_get_input(backend), dt)
 
-            # Game config hot-reload
+            # Game config + script hot-reload
             check_config_reload!()
+            check_hot_reload!()
 
             # on_update callback — return Vector{EntityDef} to trigger scene switch
             if on_update !== nothing
@@ -306,7 +320,11 @@ function run_render_loop!(initial_scene::Scene;
             flush_gpu_cleanup!(backend)
 
             # render_frame! handles 3D rendering + UI + swap_buffers
-            render_frame!(backend, current_scene)
+            profiler_scope!("Render") do
+                render_frame!(backend, current_scene)
+            end
+
+            profiler_end_frame!()
             flush_debug_draw!()
         end
     finally
@@ -469,32 +487,45 @@ function run_render_loop!(fsm::GameStateMachine;
             # Camera controllers step
             update_camera_controllers!(backend_get_input(backend), dt)
 
+            profiler_begin_frame!()
+
             # Animation step
-            update_animations!(dt)
-            update_blend_tree!(dt)
+            profiler_scope!("Animation") do
+                update_animations!(dt)
+                update_blend_tree!(dt)
+            end
 
             # Skinning step (compute bone matrices after animation)
             update_skinned_meshes!()
 
             # Physics step (collision detection, gravity, resolution)
-            update_physics!(dt)
+            profiler_scope!("Physics") do
+                update_physics!(dt)
+            end
 
             # Script step (per-entity script callbacks)
-            update_scripts!(dt, ctx)
+            profiler_scope!("Scripts") do
+                update_scripts!(dt, ctx)
+            end
 
             # Gameplay systems step
-            update_timers!(dt)
-            update_coroutines!(dt)
-            update_tweens!(dt)
-            update_behavior_trees!(dt)
-            update_health_system!(ctx)
-            update_pickups!(dt, ctx)
+            profiler_scope!("Gameplay") do
+                update_timers!(dt)
+                update_coroutines!(dt)
+                update_tweens!(dt)
+                update_behavior_trees!(dt)
+                update_nav_agents!(dt)
+                update_health_system!(ctx)
+                update_pickups!(dt, ctx)
+            end
 
             # Audio step (sync listener/source positions with transforms)
             update_audio!(dt)
 
             # Particle step (emission, simulation, billboard generation)
-            update_particles!(dt)
+            profiler_scope!("Particles") do
+                update_particles!(dt)
+            end
 
             # Terrain step (initialize new terrains, update chunk LODs)
             _cam_id = find_active_camera()
@@ -511,8 +542,9 @@ function run_render_loop!(fsm::GameStateMachine;
             update_dialogue_input!(backend_get_input(backend))
             update_debug_console!(backend_get_input(backend), dt)
 
-            # Game config hot-reload
+            # Game config + script hot-reload
             check_config_reload!()
+            check_hot_reload!()
 
             # FSM on_update! — return StateTransition to switch states
             transition = nothing
@@ -570,7 +602,11 @@ function run_render_loop!(fsm::GameStateMachine;
             flush_gpu_cleanup!(backend)
 
             # render_frame! handles 3D rendering + UI + swap_buffers
-            render_frame!(backend, current_scene)
+            profiler_scope!("Render") do
+                render_frame!(backend, current_scene)
+            end
+
+            profiler_end_frame!()
             flush_debug_draw!()
         end
     finally

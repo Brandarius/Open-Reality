@@ -7951,4 +7951,383 @@ using StaticArrays
             @test input.prev_gamepad_buttons[1][1] == true
         end
     end
+
+    @testset "Navigation System" begin
+        @testset "NavMesh building" begin
+            reset_component_stores!()
+
+            # Build a simple 2-triangle navmesh (a quad)
+            vertices = Vec3f[
+                Vec3f(0, 0, 0),   # 1
+                Vec3f(1, 0, 0),   # 2
+                Vec3f(1, 0, 1),   # 3
+                Vec3f(0, 0, 1),   # 4
+            ]
+            triangles = NTuple{3, Int}[(1, 2, 3), (1, 3, 4)]
+            nm = build_navmesh(vertices, triangles)
+
+            @test length(nm.vertices) == 4
+            @test length(nm.polygons) == 2
+            # Polygons should be neighbors (shared edge 1-3)
+            @test 2 in nm.polygons[1].neighbors
+            @test 1 in nm.polygons[2].neighbors
+        end
+
+        @testset "NavMesh grid generation" begin
+            nm = build_navmesh_from_grid(3, 3)
+            # 3x3 grid = 9 cells = 18 triangles
+            @test length(nm.polygons) == 18
+            # (3+1)*(3+1) = 16 vertices
+            @test length(nm.vertices) == 16
+        end
+
+        @testset "NavMesh grid with walkable filter" begin
+            # Block center cell
+            nm = build_navmesh_from_grid(3, 3,
+                walkable_fn = (x, z) -> !(x == 1 && z == 1)
+            )
+            # 9 cells - 1 blocked = 8 cells = 16 triangles
+            @test length(nm.polygons) == 16
+        end
+
+        @testset "Find containing polygon" begin
+            vertices = Vec3f[
+                Vec3f(0, 0, 0),
+                Vec3f(2, 0, 0),
+                Vec3f(2, 0, 2),
+                Vec3f(0, 0, 2),
+            ]
+            triangles = NTuple{3, Int}[(1, 2, 3), (1, 3, 4)]
+            nm = build_navmesh(vertices, triangles)
+
+            # Point inside first triangle
+            idx = find_containing_polygon(nm, Vec3f(1.0, 0, 0.3))
+            @test idx !== nothing
+
+            # Point inside second triangle
+            idx2 = find_containing_polygon(nm, Vec3f(0.3, 0, 1.5))
+            @test idx2 !== nothing
+        end
+
+        @testset "A* pathfinding" begin
+            # Build a 5x5 grid navmesh
+            nm = build_navmesh_from_grid(5, 5)
+
+            # Path from corner to opposite corner
+            path = find_path(nm, Vec3f(0.5, 0, 0.5), Vec3f(4.5, 0, 4.5))
+            @test !isempty(path.waypoints)
+            @test length(path.waypoints) >= 2
+            @test path.total_length > 0.0f0
+
+            # Start ≈ first waypoint
+            @test path.waypoints[1][1] ≈ 0.5f0 atol=0.01
+            @test path.waypoints[1][3] ≈ 0.5f0 atol=0.01
+
+            # Goal ≈ last waypoint
+            @test path.waypoints[end][1] ≈ 4.5f0 atol=0.01
+            @test path.waypoints[end][3] ≈ 4.5f0 atol=0.01
+        end
+
+        @testset "Same-polygon path" begin
+            nm = build_navmesh_from_grid(2, 2)
+            # Both points in same triangle
+            path = find_path(nm, Vec3f(0.1, 0, 0.1), Vec3f(0.4, 0, 0.3))
+            @test length(path.waypoints) == 2
+        end
+
+        @testset "NavAgentComponent" begin
+            reset_component_stores!()
+
+            nm = build_navmesh_from_grid(5, 5)
+
+            e = create_entity!(World())
+            add_component!(e, transform(position=Vec3d(0.5, 0.0, 0.5)))
+            add_component!(e, NavAgentComponent(speed=10.0, navmesh=nm))
+
+            @test has_component(e, NavAgentComponent)
+            @test nav_has_arrived(e)  # no path yet
+
+            # Request a path
+            success = nav_request_path!(e, Vec3f(4.5, 0, 4.5))
+            @test success
+            @test nav_has_path(e)
+            @test !nav_has_arrived(e)
+        end
+
+        @testset "NavAgent movement" begin
+            reset_component_stores!()
+
+            nm = build_navmesh_from_grid(5, 5)
+
+            e = create_entity!(World())
+            add_component!(e, transform(position=Vec3d(0.5, 0.0, 0.5)))
+            add_component!(e, NavAgentComponent(speed=100.0, arrival_distance=0.3, navmesh=nm))
+
+            nav_request_path!(e, Vec3f(4.5, 0, 4.5))
+
+            # Simulate several large time steps to reach the goal
+            for _ in 1:50
+                update_nav_agents!(0.1)
+            end
+
+            tc = get_component(e, TransformComponent)
+            pos = tc.position[]
+            # Should be near the goal
+            @test abs(pos[1] - 4.5) < 1.0
+            @test abs(pos[3] - 4.5) < 1.0
+        end
+
+        @testset "NavAgent stop" begin
+            reset_component_stores!()
+
+            nm = build_navmesh_from_grid(3, 3)
+
+            e = create_entity!(World())
+            add_component!(e, transform(position=Vec3d(0.5, 0.0, 0.5)))
+            add_component!(e, NavAgentComponent(speed=5.0, navmesh=nm))
+
+            nav_request_path!(e, Vec3f(2.5, 0, 2.5))
+            @test nav_has_path(e)
+
+            nav_stop!(e)
+            @test !nav_has_path(e)
+            @test nav_has_arrived(e)
+        end
+
+        @testset "NavMesh registry" begin
+            reset_navmesh_registry!()
+
+            nm = build_navmesh_from_grid(3, 3)
+            register_navmesh!("test_level", nm)
+
+            retrieved = get_navmesh("test_level")
+            @test retrieved !== nothing
+            @test length(retrieved.polygons) == 18
+
+            @test get_navmesh("nonexistent") === nothing
+
+            reset_navmesh_registry!()
+            @test get_navmesh("test_level") === nothing
+        end
+
+        @testset "Empty NavPath" begin
+            path = NavPath()
+            @test isempty(path.waypoints)
+            @test path.total_length == 0.0f0
+        end
+    end
+
+    @testset "Profiler System" begin
+        @testset "Profiler starts disabled" begin
+            reset_profiler!()
+            @test !profiler_enabled()
+            @test profiler_get_latest() === nothing
+        end
+
+        @testset "Profiler enable/disable" begin
+            reset_profiler!()
+            profiler_enable!(true)
+            @test profiler_enabled()
+            profiler_enable!(false)
+            @test !profiler_enabled()
+        end
+
+        @testset "Profiler frame recording" begin
+            reset_profiler!()
+            profiler_enable!(true)
+
+            profiler_begin_frame!()
+            profiler_scope!("TestScope") do
+                sleep(0.001)  # ~1ms
+            end
+            profiler_end_frame!()
+
+            latest = profiler_get_latest()
+            @test latest !== nothing
+            @test latest.total_ms > 0
+            @test length(latest.scopes) == 1
+            @test latest.scopes[1].name == "TestScope"
+            @test latest.scopes[1].duration_ms > 0
+        end
+
+        @testset "Profiler multiple scopes" begin
+            reset_profiler!()
+            profiler_enable!(true)
+
+            profiler_begin_frame!()
+            profiler_scope!("A") do
+                sleep(0.001)
+            end
+            profiler_scope!("B") do
+                sleep(0.001)
+            end
+            profiler_end_frame!()
+
+            latest = profiler_get_latest()
+            @test length(latest.scopes) == 2
+            names = [s.name for s in latest.scopes]
+            @test "A" in names
+            @test "B" in names
+        end
+
+        @testset "Profiler averaging" begin
+            reset_profiler!()
+            profiler_enable!(true)
+
+            for _ in 1:10
+                profiler_begin_frame!()
+                profiler_scope!("Work") do
+                    sleep(0.001)
+                end
+                profiler_end_frame!()
+            end
+
+            avg = profiler_get_average(10)
+            @test avg !== nothing
+            @test avg.total_ms > 0
+            @test length(avg.scopes) == 1
+            @test avg.scopes[1].name == "Work"
+        end
+
+        @testset "Profiler FPS" begin
+            reset_profiler!()
+            profiler_enable!(true)
+
+            profiler_begin_frame!()
+            sleep(0.01)  # ~10ms = ~100fps
+            profiler_end_frame!()
+
+            fps = profiler_fps()
+            @test fps > 0
+        end
+
+        @testset "Profiler no-op when disabled" begin
+            reset_profiler!()
+            # Disabled by default — scopes should be no-ops
+            profiler_begin_frame!()
+            profiler_scope!("Ignored") do
+                x = 1 + 1
+            end
+            profiler_end_frame!()
+
+            @test profiler_get_latest() === nothing
+        end
+
+        @testset "Profiler reset" begin
+            reset_profiler!()
+            profiler_enable!(true)
+            profiler_begin_frame!()
+            profiler_end_frame!()
+            @test profiler_get_latest() !== nothing
+
+            reset_profiler!()
+            @test profiler_get_latest() === nothing
+            @test !profiler_enabled()
+        end
+    end
+
+    @testset "Hot-Reload System" begin
+        @testset "Manager starts enabled" begin
+            reset_hot_reload_manager!()
+            @test hot_reload_enabled()
+            @test isempty(watched_files())
+        end
+
+        @testset "Enable/disable" begin
+            reset_hot_reload_manager!()
+            hot_reload_enable!(false)
+            @test !hot_reload_enabled()
+            hot_reload_enable!(true)
+            @test hot_reload_enabled()
+        end
+
+        @testset "Watch and unwatch files" begin
+            reset_hot_reload_manager!()
+
+            # Create a temporary script file
+            tmp = tempname() * ".jl"
+            write(tmp, "# test script v1\n")
+
+            watch_file!(tmp)
+            @test length(watched_files()) == 1
+            @test abspath(tmp) in watched_files()
+
+            unwatch_file!(tmp)
+            @test isempty(watched_files())
+
+            rm(tmp, force=true)
+        end
+
+        @testset "check_hot_reload! detects changes" begin
+            reset_hot_reload_manager!()
+
+            tmp = tempname() * ".jl"
+            write(tmp, "const _HOT_RELOAD_TEST_VAR = Ref(1)\n")
+
+            # Initial load
+            load_script_file(tmp)
+            @test Main._HOT_RELOAD_TEST_VAR[] == 1
+
+            # No change — should return 0
+            @test check_hot_reload!() == 0
+
+            # Modify the file (need to wait for mtime to change)
+            sleep(1.1)
+            write(tmp, "const _HOT_RELOAD_TEST_VAR = Ref(42)\n")
+
+            # Should detect the change
+            count = check_hot_reload!()
+            @test count == 1
+            @test Main._HOT_RELOAD_TEST_VAR[] == 42
+
+            rm(tmp, force=true)
+        end
+
+        @testset "on_reload callback" begin
+            reset_hot_reload_manager!()
+
+            tmp = tempname() * ".jl"
+            write(tmp, "# v1\n")
+
+            callback_called = Ref(false)
+            watch_file!(tmp, on_reload = () -> (callback_called[] = true))
+
+            sleep(1.1)
+            write(tmp, "# v2\n")
+            check_hot_reload!()
+
+            @test callback_called[]
+
+            rm(tmp, force=true)
+        end
+
+        @testset "Disabled hot-reload skips check" begin
+            reset_hot_reload_manager!()
+
+            tmp = tempname() * ".jl"
+            write(tmp, "# v1\n")
+            watch_file!(tmp)
+
+            hot_reload_enable!(false)
+            sleep(1.1)
+            write(tmp, "# v2\n")
+            @test check_hot_reload!() == 0
+
+            rm(tmp, force=true)
+        end
+
+        @testset "Reset clears all watches" begin
+            reset_hot_reload_manager!()
+
+            tmp = tempname() * ".jl"
+            write(tmp, "# test\n")
+            watch_file!(tmp)
+            @test length(watched_files()) == 1
+
+            reset_hot_reload_manager!()
+            @test isempty(watched_files())
+
+            rm(tmp, force=true)
+        end
+    end
 end

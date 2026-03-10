@@ -290,5 +290,7 @@ function reset_engine_state!()
     reset_item_registry!()
     reset_quest_manager!()
     reset_dialogue_manager!()
+    reset_navmesh_registry!()
+    reset_hot_reload_manager!()
     return nothing
 end
