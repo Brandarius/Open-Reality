@@ -25,13 +25,13 @@ const _SIMPLEX_GRAD3 = [
 Hash function for simplex noise gradient lookup.
 """
 function _simplex_hash(ix::Int, iy::Int, seed::UInt64)::Int
-    h = UInt64(ix) * UInt64(374761393) + UInt64(iy) * UInt64(668265263) + seed
+    h = (ix % UInt64) * UInt64(374761393) + (iy % UInt64) * UInt64(668265263) + seed
     h = xor(h, h >> 13) * UInt64(1274126177)
     return Int(h % 12) + 1
 end
 
 function _simplex_hash3(ix::Int, iy::Int, iz::Int, seed::UInt64)::Int
-    h = UInt64(ix) * UInt64(374761393) + UInt64(iy) * UInt64(668265263) + UInt64(iz) * UInt64(982451653) + seed
+    h = (ix % UInt64) * UInt64(374761393) + (iy % UInt64) * UInt64(668265263) + (iz % UInt64) * UInt64(982451653) + seed
     h = xor(h, h >> 13) * UInt64(1274126177)
     return Int(h % 12) + 1
 end

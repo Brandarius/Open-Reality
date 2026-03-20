@@ -183,8 +183,8 @@ function erode_heightmap!(hm::Matrix{Float32}, params::ErosionParams, seed::UInt
             new_x = pos_x + dir_x
             new_y = pos_y + dir_y
 
-            # Check bounds
-            if new_x < 0 || new_x >= rows - 1 || new_y < 0 || new_y >= cols - 1
+            # Check bounds (negated form catches NaN — NaN comparisons return false)
+            if !(0.0 <= new_x < rows - 1) || !(0.0 <= new_y < cols - 1)
                 break
             end
 

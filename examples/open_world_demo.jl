@@ -184,7 +184,7 @@ render(s, post_process=PostProcessConfig(
     fog_enabled=true,
     fog_mode=FOG_EXPONENTIAL2,
     fog_density=0.003f0,
-    fog_color=RGB{Float32}(0.7, 0.8, 0.95),
+    fog_color=Vec3f(0.7f0, 0.8f0, 0.95f0),
     vignette_enabled=true,
     vignette_intensity=0.2f0
 ))
