@@ -293,6 +293,8 @@ function run_render_loop!(initial_scene::Scene;
                 _proj = get_projection_matrix(_cam_id)
                 _frustum = extract_frustum(_proj * _view)
                 update_terrain!(_cam_pos, _frustum)
+                update_vegetation!(_cam_pos)
+                update_structures!(_cam_pos)
             end
 
             # Dialogue & debug console input (consume before game logic)
@@ -536,6 +538,8 @@ function run_render_loop!(fsm::GameStateMachine;
                 _proj = get_projection_matrix(_cam_id)
                 _frustum = extract_frustum(_proj * _view)
                 update_terrain!(_cam_pos, _frustum)
+                update_vegetation!(_cam_pos)
+                update_structures!(_cam_pos)
             end
 
             # Dialogue & debug console input (consume before game logic)

@@ -119,6 +119,14 @@ Generate a heightmap grid. Returns a (res_x+1) x (res_z+1) matrix of heights.
 function generate_heightmap(source::HeightmapSource, res_x::Int, res_z::Int, max_height::Float32)
     hm = Matrix{Float32}(undef, res_x + 1, res_z + 1)
 
+    # Resolve seed: prefer world_seed if set, otherwise use perlin_seed
+    _effective_seed_int = source.perlin_seed
+    _effective_seed_uint = UInt64(source.perlin_seed)
+    if source.world_seed !== nothing
+        _effective_seed_uint = derive_seed(source.world_seed, "heightmap")
+        _effective_seed_int = seed_to_int(_effective_seed_uint)
+    end
+
     if source.source_type == HEIGHTMAP_FLAT
         fill!(hm, 0.0f0)
     elseif source.source_type == HEIGHTMAP_PERLIN
@@ -127,8 +135,26 @@ function generate_heightmap(source::HeightmapSource, res_x::Int, res_z::Int, max
                              octaves=source.perlin_octaves,
                              frequency=Float64(source.perlin_frequency),
                              persistence=Float64(source.perlin_persistence),
-                             seed=source.perlin_seed)
+                             seed=_effective_seed_int)
             hm[ix + 1, iz + 1] = Float32(n * 0.5 + 0.5) * max_height
+        end
+    elseif source.source_type == HEIGHTMAP_SIMPLEX
+        for iz in 0:res_z, ix in 0:res_x
+            n = simplex_fbm_2d(Float64(ix), Float64(iz);
+                               octaves=source.perlin_octaves,
+                               frequency=Float64(source.perlin_frequency),
+                               persistence=Float64(source.perlin_persistence),
+                               seed=_effective_seed_uint)
+            hm[ix + 1, iz + 1] = Float32(n * 0.5 + 0.5) * max_height
+        end
+    elseif source.source_type == HEIGHTMAP_RIDGED
+        for iz in 0:res_z, ix in 0:res_x
+            n = ridge_fbm_2d(Float64(ix), Float64(iz);
+                             octaves=source.perlin_octaves,
+                             frequency=Float64(source.perlin_frequency),
+                             persistence=Float64(source.perlin_persistence),
+                             seed=_effective_seed_uint)
+            hm[ix + 1, iz + 1] = Float32(n) * max_height
         end
     elseif source.source_type == HEIGHTMAP_IMAGE
         # Load heightmap image if available

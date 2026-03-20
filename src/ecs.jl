@@ -292,5 +292,9 @@ function reset_engine_state!()
     reset_dialogue_manager!()
     reset_navmesh_registry!()
     reset_hot_reload_manager!()
+    reset_chunk_streaming!()
+    reset_streaming_terrain_cache!()
+    reset_vegetation_data!()
+    reset_structure_registries!()
     return nothing
 end

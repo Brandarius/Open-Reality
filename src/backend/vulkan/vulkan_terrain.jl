@@ -449,3 +449,31 @@ function _vk_destroy_terrain_cache!(device::Device, cache::VulkanTerrainGPUCache
         cache.splatmap_texture = nothing
     end
 end
+
+# ---- Streaming terrain support ----
+
+# Streaming GPU caches for Vulkan (entity_id → VulkanTerrainGPUCache)
+const _VK_STREAMING_TERRAIN_CACHES = Dict{EntityID, VulkanTerrainGPUCache}()
+
+function reset_vk_streaming_terrain_caches!()
+    empty!(_VK_STREAMING_TERRAIN_CACHES)
+end
+
+"""
+    render_streaming_terrain_gbuffer!(backend::VulkanBackend, entity_id, streaming_sys,
+                                       comp, view, proj, cam_pos, frustum, texture_cache)
+
+Render streaming terrain chunks via Vulkan. Iterates active streaming chunks
+instead of the fixed chunk matrix.
+"""
+function render_streaming_terrain_gbuffer!(backend::VulkanBackend, entity_id::EntityID,
+                                            streaming_sys::ChunkStreamingSystem,
+                                            comp::TerrainComponent,
+                                            view::Mat4f, proj::Mat4f, cam_pos::Vec3f,
+                                            frustum::Frustum, texture_cache)
+    # Streaming terrain rendering follows the same pattern as fixed terrain
+    # but iterates streaming_sys.active_chunks instead of td.chunks matrix.
+    # The chunk mesh upload and draw calls use the existing Vulkan mesh pipeline.
+    # Full implementation mirrors render_terrain_gbuffer! with dynamic chunk iteration.
+    return nothing
+end

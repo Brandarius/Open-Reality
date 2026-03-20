@@ -5,7 +5,7 @@
 
 How the heightmap data is generated.
 """
-@enum HeightmapSourceType HEIGHTMAP_IMAGE HEIGHTMAP_PERLIN HEIGHTMAP_FLAT
+@enum HeightmapSourceType HEIGHTMAP_IMAGE HEIGHTMAP_PERLIN HEIGHTMAP_FLAT HEIGHTMAP_SIMPLEX HEIGHTMAP_RIDGED HEIGHTMAP_CUSTOM
 
 """
     HeightmapSource
@@ -19,6 +19,7 @@ struct HeightmapSource
     perlin_frequency::Float32   # Base noise frequency (HEIGHTMAP_PERLIN)
     perlin_persistence::Float32 # Amplitude decay per octave
     perlin_seed::Int            # Random seed
+    world_seed::Union{WorldSeed, Nothing}  # Master seed (overrides perlin_seed when set)
 
     HeightmapSource(;
         source_type::HeightmapSourceType = HEIGHTMAP_PERLIN,
@@ -26,8 +27,9 @@ struct HeightmapSource
         perlin_octaves::Int = 6,
         perlin_frequency::Float32 = 0.01f0,
         perlin_persistence::Float32 = 0.5f0,
-        perlin_seed::Int = 42
-    ) = new(source_type, image_path, perlin_octaves, perlin_frequency, perlin_persistence, perlin_seed)
+        perlin_seed::Int = 42,
+        world_seed::Union{WorldSeed, Nothing} = nothing
+    ) = new(source_type, image_path, perlin_octaves, perlin_frequency, perlin_persistence, perlin_seed, world_seed)
 end
 
 """

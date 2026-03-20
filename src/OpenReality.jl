@@ -63,7 +63,22 @@ include("components/audio.jl")
 include("components/skeleton.jl")
 include("components/ik.jl")
 include("components/particle_system.jl")
+
+# World seed (before terrain component — terrain.jl uses WorldSeed in HeightmapSource)
+include("procgen/world_seed.jl")
+
 include("components/terrain.jl")
+
+# Procedural generation (after terrain component — uses TerrainLayer, HeightmapSource)
+include("procgen/noise.jl")
+include("procgen/biome.jl")
+include("procgen/erosion.jl")
+
+# World generator component (after procgen — uses WorldSeed, BiomeDef, ErosionParams)
+include("components/world_generator.jl")
+include("components/vegetation.jl")
+include("components/world_structure.jl")
+
 include("components/script.jl")
 include("components/inventory.jl")
 
@@ -168,7 +183,17 @@ include("rendering/frustum_culling.jl")
 include("rendering/light_culling.jl")
 include("rendering/lod.jl")
 include("rendering/terrain.jl")
+
+# Chunk streaming and world generator (after terrain rendering — uses TerrainChunk, TerrainData, compute_terrain_normals)
+include("procgen/chunk_cache.jl")
+include("procgen/chunk_streaming.jl")
+include("procgen/vegetation.jl")
+include("procgen/structures.jl")
+include("procgen/world_generator.jl")
+
 include("systems/terrain.jl")
+include("systems/vegetation.jl")
+include("systems/structures.jl")
 
 # Abstract backend interface
 include("backend/abstract.jl")
@@ -360,6 +385,10 @@ const COMPONENT_TYPES = DataType[
     IKConstraintComponent,
     # Terrain
     TerrainComponent,
+    # World Generation
+    WorldGeneratorComponent,
+    VegetationComponent,
+    WorldStructureComponent,
     # Transform
     TransformComponent,
     # Constraint
@@ -420,11 +449,61 @@ export PlayerController, find_player_and_camera, update_player!
 
 # Export Terrain
 export TerrainComponent, HeightmapSource, HeightmapSourceType, TerrainLayer
-export HEIGHTMAP_IMAGE, HEIGHTMAP_PERLIN, HEIGHTMAP_FLAT
+export HEIGHTMAP_IMAGE, HEIGHTMAP_PERLIN, HEIGHTMAP_FLAT, HEIGHTMAP_SIMPLEX, HEIGHTMAP_RIDGED, HEIGHTMAP_CUSTOM
 export TerrainChunk, TerrainData
 export initialize_terrain!, update_terrain_lod!, update_terrain!
 export heightmap_get_height, is_aabb_in_frustum
 export perlin_noise_2d, fbm_noise_2d, reset_terrain_cache!
+
+# Export World Seed
+export WorldSeed, derive_seed, seed_to_int
+
+# Export Noise Library
+export simplex_noise_2d, simplex_noise_3d, simplex_fbm_2d
+export worley_noise_2d
+export ridge_fbm_2d, billow_fbm_2d
+export domain_warp_2d
+
+# Export Biome System
+export BiomeType, BiomeDef, BiomeMap
+export BIOME_OCEAN, BIOME_BEACH, BIOME_DESERT, BIOME_SAVANNA, BIOME_GRASSLAND
+export BIOME_TEMPERATE_FOREST, BIOME_BOREAL_FOREST, BIOME_TUNDRA, BIOME_SNOW
+export BIOME_SWAMP, BIOME_TROPICAL_FOREST, BIOME_MOUNTAIN, BIOME_CUSTOM
+export classify_biome, generate_biome_map, generate_biome_splatmap
+export update_biome_map_elevation!, modulate_heightmap_by_biome!
+export default_biome_defs, get_biome_at
+
+# Export Erosion
+export ErosionParams, default_erosion_params, erode_heightmap!
+
+# Export World Generator
+export WorldGeneratorConfig, StreamingConfig, WorldGeneratorComponent
+export StreamingTerrainData, initialize_world_generator!
+export reset_streaming_terrain_cache!
+
+# Export Chunk Streaming
+export ChunkCoord, ChunkState, StreamingChunk, StreamingChunkData
+export CHUNK_UNLOADED, CHUNK_GENERATING, CHUNK_GENERATED, CHUNK_UPLOADED, CHUNK_UNLOADING
+export ChunkStreamingSystem, create_chunk_streaming, update_chunk_streaming!
+export get_streaming_chunks, get_uploaded_streaming_chunks
+export heightmap_get_height_streaming, shutdown_chunk_streaming!, reset_chunk_streaming!
+
+# Export Chunk Cache
+export ChunkCache, cache_get, cache_put!, cache_remove!, cache_clear!
+
+# Export Vegetation
+export VegetationType, VegetationDef, VegetationComponent
+export VEG_TREE, VEG_BUSH, VEG_GRASS, VEG_ROCK, VEG_FLOWER, VEG_CUSTOM
+export VegetationInstance, VegetationChunkData
+export generate_vegetation_for_chunk, update_vegetation!, reset_vegetation_data!
+
+# Export Structures
+export StructureType, StructureDef, WorldStructureComponent
+export STRUCTURE_VILLAGE, STRUCTURE_DUNGEON, STRUCTURE_LANDMARK
+export STRUCTURE_RUIN, STRUCTURE_CAMP, STRUCTURE_TOWER, STRUCTURE_CUSTOM
+export PlacedStructure, StructureRegistry
+export generate_structures_for_chunk, flatten_terrain_around_structure!
+export update_structures!, reset_structure_registries!
 
 # Export Physics Components
 export ColliderComponent, ColliderShape, AABBShape, SphereShape, CapsuleShape, CapsuleAxis

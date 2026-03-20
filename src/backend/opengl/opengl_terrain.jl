@@ -373,3 +373,167 @@ function render_terrain_gbuffer!(backend, td::TerrainData, comp::TerrainComponen
 
     glBindVertexArray(GLuint(0))
 end
+
+# ---- Streaming terrain rendering ----
+
+# GPU cache for streaming chunks (separate from fixed terrain)
+const _STREAMING_GPU_CACHES = Dict{EntityID, TerrainGPUCache}()
+
+function reset_streaming_gpu_caches!()
+    for (_, cache) in _STREAMING_GPU_CACHES
+        _destroy_terrain_gpu_cache!(cache)
+    end
+    empty!(_STREAMING_GPU_CACHES)
+end
+
+"""
+    _get_or_upload_streaming_chunk!(cache, chunk, lod) -> GPUMesh
+
+Upload a streaming chunk mesh to GPU.
+"""
+function _get_or_upload_streaming_chunk!(cache::TerrainGPUCache, chunk::TerrainChunk, lod::Int)
+    key = (chunk.grid_x, chunk.grid_z, lod)
+    if haskey(cache.chunk_meshes, key)
+        return cache.chunk_meshes[key]
+    end
+
+    mesh = chunk.lod_meshes[lod]
+    gpu_mesh = upload_mesh_raw(mesh)
+    cache.chunk_meshes[key] = gpu_mesh
+    return gpu_mesh
+end
+
+"""
+    _cleanup_streaming_gpu_chunks!(cache, active_coords)
+
+Remove GPU resources for chunks that are no longer active.
+"""
+function _cleanup_streaming_gpu_chunks!(cache::TerrainGPUCache, active_coords::Set{ChunkCoord})
+    keys_to_remove = Tuple{Int,Int,Int}[]
+    for key in keys(cache.chunk_meshes)
+        coord = (key[1], key[2])
+        if !(coord in active_coords)
+            push!(keys_to_remove, key)
+        end
+    end
+    for key in keys_to_remove
+        gm = cache.chunk_meshes[key]
+        if gm.vao != GLuint(0)
+            glDeleteVertexArrays(1, Ref(gm.vao))
+        end
+        for buf in (gm.vbo, gm.nbo, gm.ubo, gm.ebo)
+            if buf != GLuint(0)
+                glDeleteBuffers(1, Ref(buf))
+            end
+        end
+        delete!(cache.chunk_meshes, key)
+    end
+end
+
+"""
+    render_streaming_terrain_gbuffer!(backend, entity_id, streaming_sys, comp,
+                                       view, proj, cam_pos, frustum, texture_cache)
+
+Render streaming terrain chunks to the G-Buffer.
+"""
+function render_streaming_terrain_gbuffer!(backend, entity_id::EntityID,
+                                            streaming_sys::ChunkStreamingSystem,
+                                            comp::TerrainComponent,
+                                            view::Mat4f, proj::Mat4f, cam_pos::Vec3f,
+                                            frustum::Frustum, texture_cache::TextureCache)
+    # Get or create GPU cache
+    if !haskey(_STREAMING_GPU_CACHES, entity_id)
+        cache = TerrainGPUCache()
+        cache.shader = create_shader_program(TERRAIN_GBUFFER_VERTEX, TERRAIN_GBUFFER_FRAGMENT)
+        # Generate a simple default splatmap for streaming
+        cache.splatmap_texture = _create_default_streaming_splatmap()
+        _STREAMING_GPU_CACHES[entity_id] = cache
+    end
+    cache = _STREAMING_GPU_CACHES[entity_id]
+    sp = cache.shader
+    sp === nothing && return
+
+    # Cleanup GPU resources for unloaded chunks
+    active_coords = Set{ChunkCoord}()
+    for (coord, sc) in streaming_sys.active_chunks
+        if sc.state == CHUNK_GENERATED || sc.state == CHUNK_UPLOADED
+            push!(active_coords, coord)
+        end
+    end
+    _cleanup_streaming_gpu_chunks!(cache, active_coords)
+
+    glUseProgram(sp.id)
+    set_uniform!(sp, "u_View", view)
+    set_uniform!(sp, "u_Projection", proj)
+    set_uniform!(sp, "u_NumLayers", Int32(length(comp.layers)))
+
+    # Bind splatmap
+    glActiveTexture(GL_TEXTURE0)
+    glBindTexture(GL_TEXTURE_2D, cache.splatmap_texture)
+    set_uniform!(sp, "u_Splatmap", Int32(0))
+
+    # Bind layer textures
+    layer_samplers = ["u_Layer0Albedo", "u_Layer1Albedo", "u_Layer2Albedo", "u_Layer3Albedo"]
+    uv_scale_names = ["u_Layer0UVScale", "u_Layer1UVScale", "u_Layer2UVScale", "u_Layer3UVScale"]
+    for i in 1:min(4, length(comp.layers))
+        glActiveTexture(GL_TEXTURE0 + UInt32(i))
+        if i <= length(cache.layer_textures) && cache.layer_textures[i] != GLuint(0)
+            glBindTexture(GL_TEXTURE_2D, cache.layer_textures[i])
+        end
+        set_uniform!(sp, layer_samplers[i], Int32(i))
+        set_uniform!(sp, uv_scale_names[i], comp.layers[i].uv_scale)
+    end
+
+    # Render visible streaming chunks
+    for (coord, sc) in streaming_sys.active_chunks
+        if sc.data === nothing
+            continue
+        end
+        chunk = sc.data.terrain_chunk
+
+        # Frustum cull
+        if !is_aabb_in_frustum(frustum, chunk.aabb_min, chunk.aabb_max)
+            continue
+        end
+
+        # LOD selection based on distance
+        center = (chunk.aabb_min + chunk.aabb_max) * 0.5f0
+        dx = cam_pos[1] - center[1]
+        dz = cam_pos[3] - center[3]
+        dist = sqrt(dx * dx + dz * dz)
+
+        lod = length(chunk.lod_meshes)
+        for i in 1:length(DEFAULT_CHUNK_LOD_DISTANCES)
+            if dist < DEFAULT_CHUNK_LOD_DISTANCES[i]
+                lod = i
+                break
+            end
+        end
+        lod = min(lod, length(chunk.lod_meshes))
+
+        gpu_mesh = _get_or_upload_streaming_chunk!(cache, chunk, lod)
+        glBindVertexArray(gpu_mesh.vao)
+        glDrawElements(GL_TRIANGLES, gpu_mesh.index_count, GL_UNSIGNED_INT, C_NULL)
+    end
+
+    glBindVertexArray(GLuint(0))
+end
+
+"""
+    _create_default_streaming_splatmap() -> GLuint
+
+Create a simple green splatmap for streaming terrain (all weight on layer 0).
+"""
+function _create_default_streaming_splatmap()::GLuint
+    # 1x1 pixel: all weight on layer 0 (grass)
+    pixels = UInt8[255, 0, 0, 0]
+    tex_ref = Ref(GLuint(0))
+    glGenTextures(1, tex_ref)
+    tex = tex_ref[]
+    glBindTexture(GL_TEXTURE_2D, tex)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    glBindTexture(GL_TEXTURE_2D, GLuint(0))
+    return tex
+end

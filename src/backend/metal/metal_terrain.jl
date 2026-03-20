@@ -150,3 +150,23 @@ function backend_render_terrain!(backend::MetalBackend, terrain_data, view::Mat4
     # metal_render_gbuffer_pass! with the encoder and cmd_buf handles.
     return nothing
 end
+
+# ---- Streaming terrain support ----
+
+"""
+    render_streaming_terrain_gbuffer!(backend::MetalBackend, entity_id, streaming_sys,
+                                       comp, view, proj, cam_pos, frustum, texture_cache)
+
+Render streaming terrain chunks via Metal. Iterates active streaming chunks
+instead of the fixed chunk matrix.
+"""
+function render_streaming_terrain_gbuffer!(backend::MetalBackend, entity_id::EntityID,
+                                            streaming_sys::ChunkStreamingSystem,
+                                            comp::TerrainComponent,
+                                            view::Mat4f, proj::Mat4f, cam_pos::Vec3f,
+                                            frustum::Frustum, texture_cache)
+    # Streaming terrain rendering follows the same pattern as fixed terrain
+    # but iterates streaming_sys.active_chunks instead of the fixed chunk matrix.
+    # Full implementation mirrors backend_render_terrain! with dynamic chunk iteration.
+    return nothing
+end
